@@ -34,6 +34,7 @@
 #
 # ***** END LICENSE BLOCK *****
 """locking"""
+from collections import defaultdict
 import logging
 import threading
 
@@ -51,9 +52,6 @@ class ZLock(object):
                  connect_timeout=10, session_timeout=10 * 1000):
         """Create a Zookeeper lock object
 
-        A single instance of this may be used by multiple threads to
-        re-use the same zookeeper connection.
-
         :param hosts: zookeeper hosts
         :hosts type: string
         :param lock_node: Path to the parent lock node to create the locks
@@ -68,17 +66,16 @@ class ZLock(object):
         :session_timeout type: int
 
         """
-        self.connected = False
-        self.hosts = hosts
         self.cv = threading.Condition()
         self.lock_node = lock_node
-        self.connect_timeout = connect_timeout
-        self.session_timeout = session_timeout
         self.log_debug = logging.DEBUG >= log.getEffectiveLevel()
+        self.local = threading.local()
+        self.locks = defaultdict(threading.Condition)
         if logfile:
             zookeeper.set_log_stream(open(logfile))
         else:
             zookeeper.set_log_stream(open("/dev/null"))
+
         self.connection = ZConnection(hosts, connect_timeout=connect_timeout,
                                       session_timeout=session_timeout)
         self.connection.connect()
@@ -91,7 +88,7 @@ class ZLock(object):
             if self.log_debug:
                 log.debug("Lock node in zookeeper already created")
 
-    def acquire(lock_name, blocking=True):
+    def acquire(self, lock_name, blocking=True):
         """Acquire a lock
 
         :param lock_name: The name of the lock to acquire.
@@ -101,3 +98,66 @@ class ZLock(object):
         :blocking type: bool
 
         """
+        # First, try and create our locking node
+        locknode = '%s/%s' % (self.lock_node, lock_name)
+        try:
+            self.connection.create(locknode, "lock", [ZOO_OPEN_ACL_UNSAFE], 0)
+        except zookeeper.NodeExistsException:
+            # Ok if this exists already
+            pass
+
+        # Now create a node under the locknode
+        znode = self.connection.create(locknode + '/lock', "0",
+                                       [ZOO_OPEN_ACL_UNSAFE],
+                                       zookeeper.EPHEMERAL | zookeeper.SEQUENCE)
+        keyname = znode[znode.rfind('/') + 1:]
+
+        acquired = False
+        cv = self.locks[locknode]
+
+        def lock_watcher(handle, type, state, path):
+            cv.acquire()
+            cv.notify_all()
+            cv.release()
+
+        cv.acquire()
+        while not acquired:
+            # Get all the children of the node
+            children = self.connection.get_children(locknode)
+            children.sort()
+            print children, children[0], znode
+
+            if len(children) == 0 or not keyname in children:
+                # Disconnects or other errors can cause this
+                znode = self.connection.create(
+                    locknode + '/lock', "0", [ZOO_OPEN_ACL_UNSAFE],
+                    zookeeper.EPHEMERAL | zookeeper.SEQUENCE)
+                continue
+
+            if keyname == children[0]:
+                # The lock is ours!
+                acquired = True
+            else:
+                if not blocking:
+                    return False
+
+                # Set a watch on the next lowest node in the sequence
+                # This avoids the herd effect (Everyone watching for changes
+                # on the parent node)
+                prior_node = children[children.index(keyname) - 1]
+                prior_node = locknode + '/' + prior_node
+                exists = self.connection.exists(prior_node, lock_watcher)
+
+                if not exists:
+                    # The node disappeared? Rinse and repeat.
+                    continue
+
+                # Wait for a notification from get_children
+                cv.wait()
+        cv.release()
+
+        # We now have the lock, return a function to release it
+
+        def release():
+            self.connection.delete(znode)
+        return release
