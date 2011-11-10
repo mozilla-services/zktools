@@ -117,7 +117,7 @@ class ZLock(object):
 
         def lock_watcher(handle, type, state, path):
             cv.acquire()
-            cv.notify_all()
+            cv.notify()
             cv.release()
 
         cv.acquire()
