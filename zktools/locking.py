@@ -34,9 +34,9 @@
 #
 # ***** END LICENSE BLOCK *****
 """locking"""
-from collections import defaultdict
 import logging
 import threading
+import time
 
 import zookeeper
 
@@ -86,16 +86,22 @@ class ZLock(object):
             if self.log_debug:
                 log.debug("Lock node in zookeeper already created")
 
-    def acquire(self, lock_name, timeout=None):
+    def acquire(self, lock_name, timeout=None, expires=None):
         """Acquire a lock
 
         A function will be returned upon a successfull lock, which should
         be called to release the lock.
 
+        This implements "Revocable Shared Locks with Freaking Laser Beams"
+        when expires is set, and anyone holding a lock longer than this
+        value will have it revoked.
+
         :param lock_name: The name of the lock to acquire.
         :param timeout: How long to wait to acquire the lock, set to 0 to
                         get non-blocking behavior.
         :timeout type: int
+        :param expires: Amount of seconds before the locks should be revoked
+        :expires type: int
 
         """
         # First, try and create our locking node
@@ -117,7 +123,22 @@ class ZLock(object):
         def lock_watcher(handle, type, state, path):
             cv.set()
 
+        expire_times = [x for x in [timeout, expires] if x is not None]
+        if expire_times:
+            wait_for = min(expire_times)
+        else:
+            wait_for = None
+
+        lock_start = time.time()
         while not acquired:
+            # Have we been at this longer than the timeout?
+            if timeout is not None and time.time() - lock_start > timeout:
+                try:
+                    self.zk.delete(znode)
+                except:
+                    pass
+                return False
+
             # Get all the children of the node
             children = self.zk.get_children(locknode)
             children.sort()
@@ -130,30 +151,71 @@ class ZLock(object):
                 continue
 
             if keyname == children[0]:
-                # The lock is ours!
+                # The lock is ours, make sure to touch it so
+                # that we don't get revoked too soon
+                self.zk.set(znode, "0")
                 acquired = True
-            else:
-                # Set a watch on the next lowest node in the sequence
-                # This avoids the herd effect (Everyone watching for changes
-                # on the parent node)
-                prior_node = children[children.index(keyname) - 1]
-                prior_node = locknode + '/' + prior_node
-                exists = self.zk.exists(prior_node, lock_watcher)
+                break
 
-                if not exists:
-                    # The node disappeared? Rinse and repeat.
+            if expires:
+                # Revocable Shared Locks with Freaking Laser Beams impl.
+                data, info = self.zk.get(locknode + '/' + children[0])
+                mtime = info['mtime'] / 1000
+                if time.time() - mtime > expires:
+                    # First node we found is expired, remove it and repeat
+                    # We pass in the version to ensure it didn't just get
+                    # updated
+                    try:
+                        self.zk.delete(locknode + '/' + children[0],
+                                       info['version'])
+                    except:
+                        # If the delete fails, it got changed, thats fine.
+                        pass
                     continue
 
-                # Wait for a notification from get_children
-                cv.wait(timeout)
-                if not cv.isSet():
-                    # Timed out, and we're not set, delete our node
-                    self.zk.delete(znode)
-                    return False
+            # Set a watch on the next lowest node in the sequence
+            # This avoids the herd effect (Everyone watching for changes
+            # on the parent node)
+            prior_node = children[children.index(keyname) - 1]
+            prior_node = locknode + '/' + prior_node
+            exists = self.zk.exists(prior_node, lock_watcher)
 
-        def release():
-            self.zk.delete(znode)
-        return release
+            if not exists:
+                # The node disappeared? Rinse and repeat.
+                continue
+
+            # Wait for a notification from get_children, no longer
+            # than the expires time or the timeout, or wait until
+            # the watch triggers if neither expires nor timeout was
+            # set
+            cv.wait(wait_for)
+        return znode
+
+    def release(self, lock_node):
+        """Release a lock
+
+        :param lock_node: The lock node value returned by acquire
+
+        """
+        try:
+            self.zk.delete(lock_node)
+            return True
+        except:
+            return False
+
+    def renew(self, lock_node):
+        """Renews an existing lock
+
+        Used to renew a lock when using revokable shared locks.
+
+        :param lock_node: The lock node value returned by acquire
+
+        """
+        try:
+            self.zk.set(lock_node, "0")
+            return True
+        except:
+            return False
 
     def clear(self, lock_name):
         """Clear out a lock
@@ -162,6 +224,7 @@ class ZLock(object):
 
             You must be sure this is a dead lock, as clearing it will
             forcably release it.
+
         """
         locknode = '%s/%s' % (self.lock_node, lock_name)
         children = self.zk.get_children(locknode)

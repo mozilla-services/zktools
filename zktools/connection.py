@@ -67,7 +67,6 @@ class ZConnection(object):
             self.cv.notify()
             self.connected = True
             self.cv.release()
-            print handle, type, state, path
         self.handle = zookeeper.init(self.host, handle_connection,
                                      self.session_timeout)
         self.cv.wait(self.connect_timeout)
