@@ -13,6 +13,6 @@ License
 Authors
 =======
 
-``retools`` is made available by `Ben Bangert`.
+``zktools`` is made available by `Ben Bangert`.
 
 .. _Apache Zookeeper: http://zookeeper.apache.org/
