@@ -150,7 +150,7 @@ class ZkLock(object):
             if timeout is not None and time.time() - lock_start > timeout:
                 try:
                     self.zk.delete(znode)
-                except:
+                except zookeeper.NoNodeException:
                     pass
                 return False
 
@@ -192,7 +192,8 @@ class ZkLock(object):
                     try:
                         self.zk.delete(self.locknode + '/' + children[0],
                                        info['version'])
-                    except:
+                    except (zookeeper.NoNodeException,
+                            zookeeper.DataInconsistencyException):
                         # If the delete fails, it got changed, thats fine.
                         pass
                     continue
@@ -226,7 +227,7 @@ class ZkLock(object):
         try:
             self.zk.delete(self.locks.lock_node)
             return True
-        except:
+        except zookeeper.NoNodeException:
             return False
 
     def renew(self):
@@ -241,7 +242,7 @@ class ZkLock(object):
         try:
             self.zk.set(self.locks.lock_node, "0")
             return True
-        except:
+        except zookeeper.NoNodeException:
             return False
 
     def has_lock(self):
@@ -255,7 +256,7 @@ class ZkLock(object):
 
             if children and children[0] == keyname:
                 return True
-        except:
+        except (AttributeError, zookeeper.NoNodeException):
             pass
         return False
 
