@@ -128,7 +128,6 @@ class ZkLock(object):
         znode = self.zk.create(self.locknode + '/lock', "0",
                                [ZOO_OPEN_ACL_UNSAFE],
                                zookeeper.EPHEMERAL | zookeeper.SEQUENCE)
-        self.locks.lock_node = znode
         keyname = znode[znode.rfind('/') + 1:]
 
         acquired = False
@@ -162,7 +161,6 @@ class ZkLock(object):
                 znode = self.zk.create(
                     self.locknode + '/lock', "0", [ZOO_OPEN_ACL_UNSAFE],
                     zookeeper.EPHEMERAL | zookeeper.SEQUENCE)
-                self.locks.lock_node = znode
                 keyname = znode[znode.rfind('/') + 1:]
                 continue
 
@@ -205,6 +203,7 @@ class ZkLock(object):
             # the watch triggers if neither expires nor timeout was
             # set
             cv.wait(wait_for)
+        self.locks.lock_node = znode
         return True
 
     def release(self):
