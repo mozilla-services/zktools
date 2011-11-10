@@ -167,7 +167,15 @@ class ZkLock(object):
             if keyname == children[0]:
                 # The lock is ours, make sure to touch it so
                 # that we don't get revoked too soon
-                self.zk.set(znode, "0")
+                try:
+                    self.zk.set(znode, "0")
+                except zookeeper.NoNodeException:
+                    # Weren't able to update our node cause its gone
+                    znode = self.zk.create(
+                        self.locknode + '/lock', "0", [ZOO_OPEN_ACL_UNSAFE],
+                        zookeeper.EPHEMERAL | zookeeper.SEQUENCE)
+                    keyname = znode[znode.rfind('/') + 1:]
+                    continue
                 acquired = True
                 break
 
