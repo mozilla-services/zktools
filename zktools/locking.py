@@ -49,7 +49,7 @@ log = logging.getLogger(__name__)
 class ZkLock(object):
     """Zookeeper Lock
 
-    Implements a Zookeeper based lock optionally with lock revokation
+    Implements a Zookeeper based lock optionally with lock revocation
     should locks be idle for more than a specific set of time.
 
     Example::
