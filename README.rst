@@ -3,7 +3,7 @@ Zookeeper Tools
 ===============
 
 ``zktools`` is a package of tools implementating higher level constructs using
-`Apache Zookeeper <Zookeeper>`_.
+`Apache Zookeeper`_.
 
 License
 =======
@@ -15,4 +15,4 @@ Authors
 
 ``retools`` is made available by `Ben Bangert`.
 
-.. _Zookeeper: http://zookeeper.apache.org/
+.. _Apache Zookeeper: http://zookeeper.apache.org/
