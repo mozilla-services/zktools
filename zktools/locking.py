@@ -125,7 +125,6 @@ class ZLock(object):
             # Get all the children of the node
             children = self.connection.get_children(locknode)
             children.sort()
-            print children, children[0], znode
 
             if len(children) == 0 or not keyname in children:
                 # Disconnects or other errors can cause this
