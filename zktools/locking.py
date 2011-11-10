@@ -84,7 +84,7 @@ class ZkLock(object):
         :param logfile: Path to a file to log the zookeeper stream to
         :logfile type: string
         :param lock_timeout: Setting a lock_timeout makes this lock
-                             revokable and it will be considered invalid
+                             revocable and it will be considered invalid
                              after this timeout
 
         """
