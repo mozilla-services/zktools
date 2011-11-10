@@ -226,6 +226,7 @@ class ZkLock(object):
         """
         try:
             self.zk.delete(self.locks.lock_node)
+            del self.locks.lock_node
             return True
         except zookeeper.NoNodeException:
             return False
