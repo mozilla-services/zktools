@@ -13,6 +13,6 @@ License
 Authors
 =======
 
-``zktools`` is made available by `Ben Bangert`.
+``zktools`` is made available by the `Mozilla Foundation`.
 
 .. _Apache Zookeeper: http://zookeeper.apache.org/
