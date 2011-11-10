@@ -34,17 +34,25 @@
 #
 # ***** END LICENSE BLOCK *****
 """locking"""
+import logging
 import threading
 
 import zookeeper
 
+from zktools.connection import ZConnection
+
 ZOO_OPEN_ACL_UNSAFE = {"perms": 0x1f, "scheme": "world", "id": "anyone"}
 
+log = logging.getLogger(__name__)
 
-class Lock(object):
+
+class ZLock(object):
     def __init__(self, hosts, lock_node='/ZktoolsLocks', logfile=None,
-                 connect_timeout=10):
-        """Create a lock object
+                 connect_timeout=10, session_timeout=10 * 1000):
+        """Create a Zookeeper lock object
+
+        A single instance of this may be used by multiple threads to
+        re-use the same zookeeper connection.
 
         :param hosts: zookeeper hosts
         :hosts type: string
@@ -55,26 +63,38 @@ class Lock(object):
         :logfile type: string
         :param connect_timeout: Time to wait for zookeeper to connect
         :connect_timeout type: int
+        :param session_timeout: How long the session to zookeeper should be
+                                established before timing out
+        :session_timeout type: int
 
         """
+        self.connected = False
         self.hosts = hosts
+        self.cv = threading.Condition()
         self.lock_node = lock_node
-        self.connected = threading.Event()
+        self.connect_timeout = connect_timeout
+        self.session_timeout = session_timeout
+        self.log_debug = logging.DEBUG >= log.getEffectiveLevel()
         if logfile:
             zookeeper.set_log_stream(open(logfile))
         else:
             zookeeper.set_log_stream(open("/dev/null"))
+        self.connection = ZConnection(hosts, connect_timeout=connect_timeout,
+                                      session_timeout=session_timeout)
+        self.connection.connect()
 
-        def handle_connection(handle, type, state, path):
-            print "connected to zookeeper"
-            self.connected.set()
-        self.handle = zookeeper.init(hosts, handle_connection,
-                                     connect_timeout * 1000)
-        self.connected.wait(connect_timeout)
+        # Ensure out lock dir exists
+        try:
+            self.connection.create(self.lock_node, "zktools ZLock dir",
+                                   [ZOO_OPEN_ACL_UNSAFE], 0)
+        except zookeeper.NodeExistsException:
+            if self.log_debug:
+                log.debug("Lock node in zookeeper already created")
 
     def acquire(lock_name, blocking=True):
         """Acquire a lock
 
+        :param lock_name: The name of the lock to acquire.
         :param blocking: Whether to block until a lock can be acquired, or
                          release immediately with False in the event it
                          can't be acquired.
