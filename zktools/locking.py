@@ -48,15 +48,15 @@ log = logging.getLogger(__name__)
 
 
 class ZLock(object):
-    def __init__(self, hosts, lock_node='/ZktoolsLocks', logfile=None,
+    def __init__(self, hosts, lock_root='/ZktoolsLocks', logfile=None,
                  connect_timeout=10, session_timeout=10 * 1000):
         """Create a Zookeeper lock object
 
         :param hosts: zookeeper hosts
         :hosts type: string
-        :param lock_node: Path to the parent lock node to create the locks
+        :param lock_root: Path to the root lock node to create the locks
                           under
-        :lock_node type: string
+        :lock_root type: string
         :param logfile: Path to a file to log the zookeeper stream to
         :logfile type: string
         :param connect_timeout: Time to wait for zookeeper to connect
@@ -67,68 +67,64 @@ class ZLock(object):
 
         """
         self.cv = threading.Condition()
-        self.lock_node = lock_node
+        self.lock_root = lock_root
         self.log_debug = logging.DEBUG >= log.getEffectiveLevel()
-        self.local = threading.local()
-        self.locks = defaultdict(threading.Condition)
         if logfile:
             zookeeper.set_log_stream(open(logfile))
         else:
             zookeeper.set_log_stream(open("/dev/null"))
 
-        self.connection = ZConnection(hosts, connect_timeout=connect_timeout,
-                                      session_timeout=session_timeout)
-        self.connection.connect()
+        self.zk = ZConnection(hosts, connect_timeout=connect_timeout,
+                              session_timeout=session_timeout)
+        self.zk.connect()
 
         # Ensure out lock dir exists
         try:
-            self.connection.create(self.lock_node, "zktools ZLock dir",
-                                   [ZOO_OPEN_ACL_UNSAFE], 0)
+            self.zk.create(self.lock_root, "zktools ZLock dir",
+                           [ZOO_OPEN_ACL_UNSAFE], 0)
         except zookeeper.NodeExistsException:
             if self.log_debug:
                 log.debug("Lock node in zookeeper already created")
 
-    def acquire(self, lock_name, blocking=True):
+    def acquire(self, lock_name, timeout=None):
         """Acquire a lock
 
+        A function will be returned upon a successfull lock, which should
+        be called to release the lock.
+
         :param lock_name: The name of the lock to acquire.
-        :param blocking: Whether to block until a lock can be acquired, or
-                         release immediately with False in the event it
-                         can't be acquired.
-        :blocking type: bool
+        :param timeout: How long to wait to acquire the lock, set to 0 to
+                        get non-blocking behavior.
+        :timeout type: int
 
         """
         # First, try and create our locking node
-        locknode = '%s/%s' % (self.lock_node, lock_name)
+        locknode = '%s/%s' % (self.lock_root, lock_name)
         try:
-            self.connection.create(locknode, "lock", [ZOO_OPEN_ACL_UNSAFE], 0)
+            self.zk.create(locknode, "lock", [ZOO_OPEN_ACL_UNSAFE], 0)
         except zookeeper.NodeExistsException:
             # Ok if this exists already
             pass
 
         # Now create a node under the locknode
-        znode = self.connection.create(locknode + '/lock', "0",
-                                       [ZOO_OPEN_ACL_UNSAFE],
-                                       zookeeper.EPHEMERAL | zookeeper.SEQUENCE)
+        znode = self.zk.create(locknode + '/lock', "0", [ZOO_OPEN_ACL_UNSAFE],
+                               zookeeper.EPHEMERAL | zookeeper.SEQUENCE)
         keyname = znode[znode.rfind('/') + 1:]
 
         acquired = False
-        cv = self.locks[locknode]
+        cv = threading.Event()
 
         def lock_watcher(handle, type, state, path):
-            cv.acquire()
-            cv.notify()
-            cv.release()
+            cv.set()
 
-        cv.acquire()
         while not acquired:
             # Get all the children of the node
-            children = self.connection.get_children(locknode)
+            children = self.zk.get_children(locknode)
             children.sort()
 
             if len(children) == 0 or not keyname in children:
                 # Disconnects or other errors can cause this
-                znode = self.connection.create(
+                znode = self.zk.create(
                     locknode + '/lock', "0", [ZOO_OPEN_ACL_UNSAFE],
                     zookeeper.EPHEMERAL | zookeeper.SEQUENCE)
                 continue
@@ -137,26 +133,37 @@ class ZLock(object):
                 # The lock is ours!
                 acquired = True
             else:
-                if not blocking:
-                    return False
-
                 # Set a watch on the next lowest node in the sequence
                 # This avoids the herd effect (Everyone watching for changes
                 # on the parent node)
                 prior_node = children[children.index(keyname) - 1]
                 prior_node = locknode + '/' + prior_node
-                exists = self.connection.exists(prior_node, lock_watcher)
+                exists = self.zk.exists(prior_node, lock_watcher)
 
                 if not exists:
                     # The node disappeared? Rinse and repeat.
                     continue
 
                 # Wait for a notification from get_children
-                cv.wait()
-        cv.release()
-
-        # We now have the lock, return a function to release it
+                cv.wait(timeout)
+                if not cv.isSet():
+                    # Timed out, and we're not set, delete our node
+                    self.zk.delete(znode)
+                    return False
 
         def release():
-            self.connection.delete(znode)
+            self.zk.delete(znode)
         return release
+
+    def clear(self, lock_name):
+        """Clear out a lock
+
+        .. warning::
+
+            You must be sure this is a dead lock, as clearing it will
+            forcably release it.
+        """
+        locknode = '%s/%s' % (self.lock_node, lock_name)
+        children = self.zk.get_children(locknode)
+        for child in children:
+            self.zk.delete(self.lock_root + '/' + child)
