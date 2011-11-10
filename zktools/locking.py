@@ -144,6 +144,8 @@ class ZkLock(object):
 
         lock_start = time.time()
         while not acquired:
+            cv.clear()
+
             # Have we been at this longer than the timeout?
             if timeout is not None and time.time() - lock_start > timeout:
                 try:
