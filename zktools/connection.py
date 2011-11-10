@@ -39,7 +39,7 @@ import threading
 import zookeeper
 
 
-class ZConnection(object):
+class ZkConnection(object):
     def __init__(self, host="localhost:2181", connect_timeout=10,
                  session_timeout=10 * 1000, reconnect=True):
         self.connected = False

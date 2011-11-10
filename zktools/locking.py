@@ -33,50 +33,71 @@
 # the terms of any one of the MPL, the GPL or the LGPL.
 #
 # ***** END LICENSE BLOCK *****
-"""locking"""
+"""Zookeeper Locking"""
 import logging
 import threading
 import time
 
 import zookeeper
 
-from zktools.connection import ZConnection
 
 ZOO_OPEN_ACL_UNSAFE = {"perms": 0x1f, "scheme": "world", "id": "anyone"}
 
 log = logging.getLogger(__name__)
 
 
-class ZLock(object):
-    def __init__(self, hosts, lock_root='/ZktoolsLocks', logfile=None,
-                 connect_timeout=10, session_timeout=10 * 1000):
+class ZkLock(object):
+    """Zookeeper Lock
+
+    Implements a Zookeeper based lock optionally with lock revokation
+    should locks be idle for more than a specific set of time.
+
+    Example::
+
+        from zktools.connection import ZkConnection
+        from zktools.locking import ZkLock
+
+        # Create and open the connection
+        conn = ZkConnection()
+        conn.connect()
+
+        my_lock = ZkLock(conn, "my_lock_name")
+
+        my_lock.acquire() # wait to acquire lock
+        # do something with the lock
+
+        my_lock.release() # release our lock
+
+    """
+    def __init__(self, connection, lock_name, lock_timeout=None,
+                 lock_root='/ZktoolsLocks', logfile=None):
         """Create a Zookeeper lock object
 
-        :param hosts: zookeeper hosts
-        :hosts type: string
+        This implements "Revocable Shared Locks with Freaking Laser Beams"
+        when lock_timeout is set, and anyone holding a lock longer than this
+        value will have it revoked.
+
+        :param hosts: zookeeper connection object
         :param lock_root: Path to the root lock node to create the locks
                           under
         :lock_root type: string
         :param logfile: Path to a file to log the zookeeper stream to
         :logfile type: string
-        :param connect_timeout: Time to wait for zookeeper to connect
-        :connect_timeout type: int
-        :param session_timeout: How long the session to zookeeper should be
-                                established before timing out
-        :session_timeout type: int
+        :param lock_timeout: Setting a lock_timeout makes this lock
+                             revokable and it will be considered invalid
+                             after this timeout
 
         """
+        self.zk = connection
         self.cv = threading.Condition()
         self.lock_root = lock_root
+        self.lock_timeout = lock_timeout
+        self.locks = threading.local()
         self.log_debug = logging.DEBUG >= log.getEffectiveLevel()
         if logfile:
             zookeeper.set_log_stream(open(logfile))
         else:
             zookeeper.set_log_stream(open("/dev/null"))
-
-        self.zk = ZConnection(hosts, connect_timeout=connect_timeout,
-                              session_timeout=session_timeout)
-        self.zk.connect()
 
         # Ensure out lock dir exists
         try:
@@ -86,35 +107,28 @@ class ZLock(object):
             if self.log_debug:
                 log.debug("Lock node in zookeeper already created")
 
-    def acquire(self, lock_name, timeout=None, expires=None):
+        # Try and create our locking node
+        self.locknode = '%s/%s' % (self.lock_root, lock_name)
+        try:
+            self.zk.create(self.locknode, "lock", [ZOO_OPEN_ACL_UNSAFE], 0)
+        except zookeeper.NodeExistsException:
+            # Ok if this exists already
+            pass
+
+    def acquire(self, timeout=None):
         """Acquire a lock
-
-        A function will be returned upon a successfull lock, which should
-        be called to release the lock.
-
-        This implements "Revocable Shared Locks with Freaking Laser Beams"
-        when expires is set, and anyone holding a lock longer than this
-        value will have it revoked.
 
         :param lock_name: The name of the lock to acquire.
         :param timeout: How long to wait to acquire the lock, set to 0 to
                         get non-blocking behavior.
         :timeout type: int
-        :param expires: Amount of seconds before the locks should be revoked
-        :expires type: int
 
         """
-        # First, try and create our locking node
-        locknode = '%s/%s' % (self.lock_root, lock_name)
-        try:
-            self.zk.create(locknode, "lock", [ZOO_OPEN_ACL_UNSAFE], 0)
-        except zookeeper.NodeExistsException:
-            # Ok if this exists already
-            pass
-
-        # Now create a node under the locknode
-        znode = self.zk.create(locknode + '/lock', "0", [ZOO_OPEN_ACL_UNSAFE],
+        # Create a lock node
+        znode = self.zk.create(self.locknode + '/lock', "0",
+                               [ZOO_OPEN_ACL_UNSAFE],
                                zookeeper.EPHEMERAL | zookeeper.SEQUENCE)
+        self.locks.lock_node = znode
         keyname = znode[znode.rfind('/') + 1:]
 
         acquired = False
@@ -123,7 +137,7 @@ class ZLock(object):
         def lock_watcher(handle, type, state, path):
             cv.set()
 
-        expire_times = [x for x in [timeout, expires] if x is not None]
+        expire_times = [x for x in [timeout, self.lock_timeout] if x is not None]
         if expire_times:
             wait_for = min(expire_times)
         else:
@@ -140,13 +154,13 @@ class ZLock(object):
                 return False
 
             # Get all the children of the node
-            children = self.zk.get_children(locknode)
+            children = self.zk.get_children(self.locknode)
             children.sort()
 
             if len(children) == 0 or not keyname in children:
                 # Disconnects or other errors can cause this
                 znode = self.zk.create(
-                    locknode + '/lock', "0", [ZOO_OPEN_ACL_UNSAFE],
+                    self.locknode + '/lock', "0", [ZOO_OPEN_ACL_UNSAFE],
                     zookeeper.EPHEMERAL | zookeeper.SEQUENCE)
                 continue
 
@@ -157,16 +171,16 @@ class ZLock(object):
                 acquired = True
                 break
 
-            if expires:
+            if self.lock_timeout:
                 # Revocable Shared Locks with Freaking Laser Beams impl.
-                data, info = self.zk.get(locknode + '/' + children[0])
+                data, info = self.zk.get(self.locknode + '/' + children[0])
                 mtime = info['mtime'] / 1000
-                if time.time() - mtime > expires:
+                if time.time() - mtime > self.lock_timeout:
                     # First node we found is expired, remove it and repeat
                     # We pass in the version to ensure it didn't just get
                     # updated
                     try:
-                        self.zk.delete(locknode + '/' + children[0],
+                        self.zk.delete(self.locknode + '/' + children[0],
                                        info['version'])
                     except:
                         # If the delete fails, it got changed, thats fine.
@@ -177,7 +191,7 @@ class ZLock(object):
             # This avoids the herd effect (Everyone watching for changes
             # on the parent node)
             prior_node = children[children.index(keyname) - 1]
-            prior_node = locknode + '/' + prior_node
+            prior_node = self.locknode + '/' + prior_node
             exists = self.zk.exists(prior_node, lock_watcher)
 
             if not exists:
@@ -189,35 +203,52 @@ class ZLock(object):
             # the watch triggers if neither expires nor timeout was
             # set
             cv.wait(wait_for)
-        return znode
+        return True
 
-    def release(self, lock_node):
+    def release(self):
         """Release a lock
 
-        :param lock_node: The lock node value returned by acquire
+        Returns True if the lock was released, or False if it is no
+        longer valid.
 
         """
         try:
-            self.zk.delete(lock_node)
+            self.zk.delete(self.locks.lock_node)
             return True
         except:
             return False
 
-    def renew(self, lock_node):
+    def renew(self):
         """Renews an existing lock
 
         Used to renew a lock when using revokable shared locks.
 
-        :param lock_node: The lock node value returned by acquire
+        Returns True if the lock was renewed, or False if it is no
+        longer valid.
 
         """
         try:
-            self.zk.set(lock_node, "0")
+            self.zk.set(self.locks.lock_node, "0")
             return True
         except:
             return False
 
-    def clear(self, lock_name):
+    def has_lock(self):
+        """Returns whether the lock is acquired or not"""
+        try:
+            znode = self.locks.lock_node
+            keyname = znode[znode.rfind('/') + 1:]
+            # Get all the children of the node
+            children = self.zk.get_children(self.locknode)
+            children.sort()
+
+            if children and children[0] == keyname:
+                return True
+        except:
+            pass
+        return False
+
+    def clear(self):
         """Clear out a lock
 
         .. warning::
@@ -225,8 +256,10 @@ class ZLock(object):
             You must be sure this is a dead lock, as clearing it will
             forcably release it.
 
+        Returns True if the lock was cleared, or False if it
+        is no longer valid.
+
         """
-        locknode = '%s/%s' % (self.lock_node, lock_name)
-        children = self.zk.get_children(locknode)
+        children = self.zk.get_children(self.locknode)
         for child in children:
             self.zk.delete(self.lock_root + '/' + child)
