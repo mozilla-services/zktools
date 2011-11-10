@@ -162,6 +162,8 @@ class ZkLock(object):
                 znode = self.zk.create(
                     self.locknode + '/lock', "0", [ZOO_OPEN_ACL_UNSAFE],
                     zookeeper.EPHEMERAL | zookeeper.SEQUENCE)
+                self.locks.lock_node = znode
+                keyname = znode[znode.rfind('/') + 1:]
                 continue
 
             if keyname == children[0]:
