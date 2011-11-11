@@ -77,15 +77,17 @@ class ZkLock(object):
         when lock_timeout is set, and anyone holding a lock longer than this
         value will have it revoked.
 
-        :param hosts: zookeeper connection object
+        :param connection: zookeeper connection object
+        :type connection: ZkConnection instance
         :param lock_root: Path to the root lock node to create the locks
                           under
-        :lock_root type: string
+        :type lock_root: string
         :param logfile: Path to a file to log the zookeeper stream to
-        :logfile type: string
+        :type logfile: string
         :param lock_timeout: Setting a lock_timeout makes this lock
                              revocable and it will be considered invalid
                              after this timeout
+        :type lock_timeout: int
 
         """
         self.zk = connection
@@ -119,9 +121,10 @@ class ZkLock(object):
         """Acquire a lock
 
         :param lock_name: The name of the lock to acquire.
+        :type lock_name: string
         :param timeout: How long to wait to acquire the lock, set to 0 to
                         get non-blocking behavior.
-        :timeout type: int
+        :type timeout: int
 
         """
         # Create a lock node

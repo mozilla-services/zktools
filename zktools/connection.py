@@ -40,8 +40,21 @@ import zookeeper
 
 
 class ZkConnection(object):
+    """Zookeeper Connection object"""
     def __init__(self, host="localhost:2181", connect_timeout=10,
                  session_timeout=10 * 1000, reconnect=True):
+        """Create a connection object
+
+        :param host: A valid zookeeper host string
+        :param connect_timeout: Timeout for connecting to zookeeper
+        :type connect_timeout: int
+        :param session_timeout: Timeout for the zookeeper session
+        :type session_timeout: int
+        :param reconnect: Whether the connection should automatically
+                          be re-established when it goes down.
+        :type reconnect: bool
+
+        """
         self.connected = False
         self.host = host
         self.connect_timeout = connect_timeout
@@ -51,6 +64,7 @@ class ZkConnection(object):
         self.handle = None
 
     def connect(self):
+        """Connect to zookeeper"""
         self.cv.acquire()
 
         # See if the connection was already established

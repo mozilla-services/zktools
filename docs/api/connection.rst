@@ -10,4 +10,4 @@ Module Contents
 ---------------
 
 .. autoclass:: ZkConnection
-    :members:
+    :members: __init__, connect, __getattr__

@@ -9,4 +9,4 @@ Module Contents
 ---------------
 
 .. autoclass:: ZkLock
-    :members:
+    :members: __init__, acquire, renew, release, has_lock, clear
