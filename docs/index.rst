@@ -6,6 +6,7 @@ Zookeeper Tools
 `Apache Zookeeper`_.   
 
 It currently provides:
+
 * A Zookeeper Connection object that handles proxying calls to zookeeper
   using the correct zookeeper handle, and re-establishing the connection
   during connection loss in a call.
