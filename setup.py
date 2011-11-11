@@ -8,6 +8,13 @@ here = os.path.abspath(os.path.dirname(__file__))
 README = open(os.path.join(here, 'README.rst')).read()
 CHANGES = open(os.path.join(here, 'CHANGES.rst')).read()
 
+reqs = []
+on_rtd = os.environ.get('READTHEDOCS', None) == 'True'
+if not on_rtd:
+    reqs.extend([
+        "zkpython>=0.4",
+    ])
+
 setup(name='zktools',
       version=__version__,
       description='Zookeeper Tools',
@@ -26,9 +33,7 @@ setup(name='zktools',
       include_package_data=True,
       zip_safe=False,
       tests_require=['pkginfo', 'Mock>=0.7', 'nose'],
-      install_requires=[
-          "zkpython>=0.4",
-      ],
+      install_requires=reqs,
       entry_points="""
       """
 )
