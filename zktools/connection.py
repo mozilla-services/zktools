@@ -51,21 +51,20 @@ class ZkConnection(object):
         self.handle = None
 
     def connect(self):
-        if not self.cv.acquire(blocking=False):
-            # We don't have the lock, wait for the connection to come up
-            self.cv.wait(self.connect_timeout)
+        self.cv.acquire()
 
-            # Is the connection usable now?
-            if zookeeper.state(self.handle) == zookeeper.CONNECTED_STATE:
-                return
-            else:
-                raise Exception("Zookeeper connection not re-established")
-        self.connected = False
+        # See if the connection was already established
+        if self.handle and zookeeper.state(self.handle) == zookeeper.CONNECTED_STATE:
+            return
 
-        def handle_connection(handle, type, state, path):
+        def handle_connection(handle, typ, state, path):
             self.cv.acquire()
             self.cv.notify()
-            self.connected = True
+            if typ == zookeeper.SESSION_EVENT:
+                if state == zookeeper.CONNECTED_STATE:
+                    self.connected = True
+                elif state == zookeeper.CONNECTING_STATE:
+                    self.connected = False
             self.cv.release()
         self.handle = zookeeper.init(self.host, handle_connection,
                                      self.session_timeout)
