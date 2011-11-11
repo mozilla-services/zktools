@@ -47,4 +47,7 @@ Module Listing
     
     api/index
 
+
+.. include:: ../CHANGES.rst
+
 .. _Apache Zookeeper: http://zookeeper.apache.org/
