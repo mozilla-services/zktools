@@ -9,4 +9,5 @@ zktools
 Features
 --------
 
-- Write lock implementation
+- Write lock implementation, with revokable shared locks.
+- Zookeeper connection object with automatic reconnect.
