@@ -1,17 +1,25 @@
-.. zktools documentation master file, created by
-   sphinx-quickstart on Fri Nov 11 13:23:01 2011.
-   You can adapt this file completely to your liking, but it should at least
-   contain the root `toctree` directive.
+===============
+Zookeeper Tools
+===============
 
-Welcome to zktools's documentation!
-===================================
+``zktools`` is a package of tools implementating higher level constructs using
+`Apache Zookeeper`_.   
 
-Contents:
+License
+=======
 
-.. toctree::
-   :maxdepth: 2
+``zktools`` is offered under the MPL license.
 
+Authors
+=======
 
+``zktools`` is made available by the `Mozilla Foundation`.
+
+Source
+======
+
+Source code can be found on `the github zktools repository 
+<https://github.com/mozilla-services/zktools>`_.
 
 Indices and tables
 ==================
@@ -19,4 +27,14 @@ Indices and tables
 * :ref:`genindex`
 * :ref:`modindex`
 * :ref:`search`
+* :ref:`glossary`
 
+Module Listing
+--------------
+
+.. toctree::
+    :maxdepth: 2
+    
+    api/index
+
+.. _Apache Zookeeper: http://zookeeper.apache.org/
