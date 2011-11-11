@@ -45,6 +45,22 @@ class ZkConnection(object):
                  session_timeout=10 * 1000, reconnect=True):
         """Create a connection object
 
+        Example::
+
+            zk = ZkConnection()
+            zk.connect()
+
+            node = zk.create(
+                "/my/node", "a value",
+                [{"perms": 0x1f, "scheme": "world", "id": "anyone"}],
+                0)
+
+        .. note::
+
+            ZkConnection ensures that all zookeeper functions use the
+            same zookeeper handle that ZkConnection has, so it does
+            not need to be passed in as the first argument.
+
         :param host: A valid zookeeper host string
         :param connect_timeout: Timeout for connecting to zookeeper
         :type connect_timeout: int
