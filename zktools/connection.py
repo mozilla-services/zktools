@@ -89,12 +89,12 @@ class ZkConnection(object):
 
         def handle_connection(handle, typ, state, path):
             self.cv.acquire()
-            self.cv.notify()
             if typ == zookeeper.SESSION_EVENT:
                 if state == zookeeper.CONNECTED_STATE:
                     self.connected = True
                 elif state == zookeeper.CONNECTING_STATE:
                     self.connected = False
+            self.cv.notify()
             self.cv.release()
         self.handle = zookeeper.init(self.host, handle_connection,
                                      self.session_timeout)

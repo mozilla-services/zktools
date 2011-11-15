@@ -126,6 +126,9 @@ class ZkLock(object):
                         get non-blocking behavior.
         :type timeout: int
 
+        :returns: True if the lock was acquired, False otherwise
+        :rtype: bool
+
         """
         # Create a lock node
         znode = self.zk.create(self.locknode + '/lock', "0",
@@ -223,8 +226,9 @@ class ZkLock(object):
     def release(self):
         """Release a lock
 
-        Returns True if the lock was released, or False if it is no
-        longer valid.
+        :returns: True if the lock was released, or False if it is no
+                  longer valid.
+        :rtype: bool
 
         """
         try:
@@ -239,8 +243,9 @@ class ZkLock(object):
 
         Used to renew a lock when using revokable shared locks.
 
-        Returns True if the lock was renewed, or False if it is no
-        longer valid.
+        :returns: True if the lock was renewed, or False if it is no
+                  longer valid.
+        :rtype: bool
 
         """
         try:
@@ -250,7 +255,12 @@ class ZkLock(object):
             return False
 
     def has_lock(self):
-        """Returns whether the lock is acquired or not"""
+        """Check with Zookeeper to see if the lock is acquired
+
+        :returns: Whether the lock is acquired or not
+        :rtype: bool
+
+        """
         try:
             znode = self.locks.lock_node
             keyname = znode[znode.rfind('/') + 1:]
@@ -272,8 +282,9 @@ class ZkLock(object):
             You must be sure this is a dead lock, as clearing it will
             forcably release it.
 
-        Returns True if the lock was cleared, or False if it
-        is no longer valid.
+        :returns: True if the lock was cleared, or False if it
+                  is no longer valid.
+        :rtype: bool
 
         """
         children = self.zk.get_children(self.locknode)

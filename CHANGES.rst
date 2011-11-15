@@ -7,5 +7,5 @@ Changelog
 Features
 ********
 
-- Write lock implementation, with revokable shared locks.
+- Lock implementation, with revokable shared locks.
 - Zookeeper connection object with automatic reconnect.
