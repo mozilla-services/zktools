@@ -108,12 +108,18 @@ class ZkConnection(object):
         """Returns a reconnecting version that also uses the current handle"""
         zoo_func = getattr(zookeeper, name)
 
+        # Check that we're still connected
+        if not self.connected and self.reconnect:
+            self.connect()
+
         def call_func(*args, **kwargs):
             if not self.reconnect:
                 return zoo_func(self.handle, *args, **kwargs)
             try:
                 return zoo_func(self.handle, *args, **kwargs)
-            except zookeeper.ConnectionLossException:
+            except (zookeeper.ConnectionLossException,
+                    zookeeper.SessionExpiredException,
+                    zookeeper.SessionMovedException):
                 self.connect()
                 return zoo_func(self.handle, *args, **kwargs)
         return call_func
