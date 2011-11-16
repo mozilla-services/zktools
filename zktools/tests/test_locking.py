@@ -1,3 +1,4 @@
+from contextlib import nested
 import unittest
 import mock
 
@@ -10,11 +11,7 @@ class TestLocking(unittest.TestCase):
     def test_lock_success(self):
         mock_conn = mock.Mock()
         mock_conn.cv = mock.Mock()
-
         mock_zc = mock.Mock()
-        mock_zc.SESSION_EVENT = 1
-        mock_zc.CONNECTED_STATE = 3
-
         mock_conn.create.side_effect = sequence(
             '/ZktoolsLocks',
             '/ZktoolsLocks/lock',
@@ -32,18 +29,13 @@ class TestLocking(unittest.TestCase):
     def test_lock_disconnect_issue(self):
         mock_conn = mock.Mock()
         mock_conn.cv = mock.Mock()
-
         mock_zc = mock.Mock()
-        mock_zc.SESSION_EVENT = 1
-        mock_zc.CONNECTED_STATE = 3
-
         mock_conn.create.side_effect = sequence(
             '/ZktoolsLocks',
             '/ZktoolsLocks/lock',
             '/ZktoolsLocks/lock/lock0001',
             '/ZktoolsLocks/lock/lock0002'
         )
-
         mock_conn.get_children.side_effect = sequence(
             [], ['lock0002']
         )
@@ -58,18 +50,13 @@ class TestLocking(unittest.TestCase):
     def test_lock_has_lock(self):
         mock_conn = mock.Mock()
         mock_conn.cv = mock.Mock()
-
         mock_zc = mock.Mock()
-        mock_zc.SESSION_EVENT = 1
-        mock_zc.CONNECTED_STATE = 3
-
         mock_conn.create.side_effect = sequence(
             '/ZktoolsLocks',
             '/ZktoolsLocks/lock',
             '/ZktoolsLocks/lock/lock0001',
             '/ZktoolsLocks/lock/lock0002'
         )
-
         mock_conn.get_children.side_effect = sequence(
             ['lock0001'], ['lock0001']
         )
@@ -79,6 +66,29 @@ class TestLocking(unittest.TestCase):
             self.assertEqual(lock.acquire(), True)
             self.assertEqual(lock.has_lock(), True)
             self.assertEqual(lock.release(), True)
+
+    def test_lock_wait(self):
+        mock_conn = mock.Mock()
+        mock_conn.cv = mock.Mock()
+        mock_zc = mock.Mock()
+        mock_conn.create.side_effect = sequence(
+            '/ZktoolsLocks',
+            '/ZktoolsLocks/lock',
+            '/ZktoolsLocks/lock/lock0002'
+        )
+        mock_conn.get_children.side_effect = sequence(
+            ['lock0001', 'lock0002'], ['lock0002']
+        )
+
+        lock = self.makeOne(mock_conn, 'lock')
+        with nested(
+            mock.patch('zktools.connection.zookeeper', mock_zc),
+            mock.patch('threading.Event')
+        ):
+            self.assertEqual(lock.acquire(), True)
+            self.assertEqual(lock.release(), True)
+            self.assertEqual(len(mock_conn.method_calls), 8)
+
 
 
 def sequence(*args):
