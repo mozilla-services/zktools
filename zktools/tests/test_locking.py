@@ -90,7 +90,6 @@ class TestLocking(unittest.TestCase):
             self.assertEqual(len(mock_conn.method_calls), 8)
 
 
-
 def sequence(*args):
     orig_values = args
     values = list(reversed(args))
