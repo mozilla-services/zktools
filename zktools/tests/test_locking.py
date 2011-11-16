@@ -7,29 +7,88 @@ class TestLocking(unittest.TestCase):
         from zktools.locking import ZkLock
         return ZkLock(*args, **kwargs)
 
-    def test_connect(self):
+    def test_lock_success(self):
         mock_conn = mock.Mock()
         mock_conn.cv = mock.Mock()
-        lock = self.makeOne(mock_conn, 'lock')
 
         mock_zc = mock.Mock()
         mock_zc.SESSION_EVENT = 1
         mock_zc.CONNECTED_STATE = 3
 
-        results = [
+        mock_conn.create.side_effect = sequence(
             '/ZktoolsLocks',
             '/ZktoolsLocks/lock',
             '/ZktoolsLocks/lock/lock0001'
-        ]
-        results.reverse()
-
-        def pop_arg(*args):
-            return results.pop()
-        mock_conn.create.side_effect = pop_arg
+        )
         mock_conn.get_children.return_value = ['lock0001']
 
+        lock = self.makeOne(mock_conn, 'lock')
         with mock.patch('zktools.connection.zookeeper', mock_zc):
             result = lock.acquire()
             self.assertEqual(result, True)
             result = lock.release()
             self.assertEqual(result, True)
+
+    def test_lock_disconnect_issue(self):
+        mock_conn = mock.Mock()
+        mock_conn.cv = mock.Mock()
+
+        mock_zc = mock.Mock()
+        mock_zc.SESSION_EVENT = 1
+        mock_zc.CONNECTED_STATE = 3
+
+        mock_conn.create.side_effect = sequence(
+            '/ZktoolsLocks',
+            '/ZktoolsLocks/lock',
+            '/ZktoolsLocks/lock/lock0001',
+            '/ZktoolsLocks/lock/lock0002'
+        )
+
+        mock_conn.get_children.side_effect = sequence(
+            [], ['lock0002']
+        )
+
+        lock = self.makeOne(mock_conn, 'lock')
+        with mock.patch('zktools.connection.zookeeper', mock_zc):
+            result = lock.acquire()
+            self.assertEqual(result, True)
+            result = lock.release()
+            self.assertEqual(result, True)
+
+    def test_lock_has_lock(self):
+        mock_conn = mock.Mock()
+        mock_conn.cv = mock.Mock()
+
+        mock_zc = mock.Mock()
+        mock_zc.SESSION_EVENT = 1
+        mock_zc.CONNECTED_STATE = 3
+
+        mock_conn.create.side_effect = sequence(
+            '/ZktoolsLocks',
+            '/ZktoolsLocks/lock',
+            '/ZktoolsLocks/lock/lock0001',
+            '/ZktoolsLocks/lock/lock0002'
+        )
+
+        mock_conn.get_children.side_effect = sequence(
+            ['lock0001'], ['lock0001']
+        )
+
+        lock = self.makeOne(mock_conn, 'lock')
+        with mock.patch('zktools.connection.zookeeper', mock_zc):
+            self.assertEqual(lock.acquire(), True)
+            self.assertEqual(lock.has_lock(), True)
+            self.assertEqual(lock.release(), True)
+
+
+def sequence(*args):
+    orig_values = args
+    values = list(reversed(args))
+
+    def return_value(*args):
+        try:
+            return values.pop()
+        except IndexError:
+            print orig_values
+            raise
+    return return_value
