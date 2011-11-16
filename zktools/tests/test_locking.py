@@ -81,10 +81,13 @@ class TestLocking(unittest.TestCase):
         )
 
         lock = self.makeOne(mock_conn, 'lock')
-        with nested(
-            mock.patch('zktools.connection.zookeeper', mock_zc),
-            mock.patch('threading.Event')
-        ):
+
+        def release_wait(prior_node, func):
+            func(0, 0, 0, 0)
+
+        mock_conn.exists.side_effect = release_wait
+
+        with mock.patch('zktools.connection.zookeeper', mock_zc):
             self.assertEqual(lock.acquire(), True)
             self.assertEqual(lock.release(), True)
             self.assertEqual(len(mock_conn.method_calls), 8)
@@ -94,7 +97,7 @@ def sequence(*args):
     orig_values = args
     values = list(reversed(args))
 
-    def return_value(*args):
+    def return_value(*args):  # pragma: nocover
         try:
             return values.pop()
         except IndexError:
