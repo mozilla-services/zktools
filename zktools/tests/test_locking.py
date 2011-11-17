@@ -146,6 +146,59 @@ class TestLocking(unittest.TestCase):
             self.assertEqual(lock.acquire(), True)
             self.assertEqual(len(mock_conn.method_calls), 8)
 
+    def test_lock_revoked_upon_acquiring(self):
+        """Test that we handle it if we acquired the lock, but then
+        the node was deleted"""
+        mock_conn = mock.Mock()
+        mock_conn.cv = mock.Mock()
+        mock_zc = mock.Mock()
+        mock_conn.create.side_effect = sequence(
+            '/ZktoolsLocks',
+            '/ZktoolsLocks/lock',
+            '/ZktoolsLocks/lock/lock0001',
+            '/ZktoolsLocks/lock/lock0002'
+        )
+        mock_conn.get_children.side_effect = sequence(
+            ['lock0001'], ['lock0002']
+        )
+
+        # We can't fake the zookeeper exception apparently
+        import zookeeper
+        mock_conn.set.side_effect = sequence(
+            zookeeper.NoNodeException(),
+            None
+        )
+
+        lock = self.makeOne(mock_conn, 'lock')
+
+        def release_wait(prior_node, func):
+            func(0, 0, 0, 0)
+
+        mock_conn.exists.side_effect = release_wait
+
+        with mock.patch('zktools.connection.zookeeper', mock_zc):
+            self.assertEqual(lock.acquire(), True)
+            self.assertEqual(len(mock_conn.method_calls), 8)
+
+    def test_renew(self):
+        mock_conn = mock.Mock()
+        mock_conn.cv = mock.Mock()
+        mock_zc = mock.Mock()
+        mock_conn.create.side_effect = sequence(
+            '/ZktoolsLocks',
+            '/ZktoolsLocks/lock',
+            '/ZktoolsLocks/lock/lock0001',
+        )
+        mock_conn.get_children.side_effect = sequence(
+            ['lock0001'],
+        )
+
+        lock = self.makeOne(mock_conn, 'lock')
+        with mock.patch('zktools.connection.zookeeper', mock_zc):
+            self.assertEqual(lock.acquire(), True)
+            self.assertEqual(lock.renew(), True)
+            self.assertEqual(len(mock_conn.method_calls), 6)
+
 
 def sequence(*args):
     orig_values = args
@@ -153,7 +206,11 @@ def sequence(*args):
 
     def return_value(*args):  # pragma: nocover
         try:
-            return values.pop()
+            val = values.pop()
+            if isinstance(val, Exception):
+                raise val
+            else:
+                return val
         except IndexError:
             print orig_values
             raise

@@ -257,7 +257,7 @@ class ZkLock(object):
         try:
             self.zk.set(self.locks.lock_node, "0")
             return True
-        except zookeeper.NoNodeException:
+        except (zookeeper.NoNodeException, AttributeError):
             return False
 
     def has_lock(self):
@@ -276,7 +276,7 @@ class ZkLock(object):
 
             if children and children[0] == keyname:
                 return True
-        except (AttributeError, zookeeper.NoNodeException):
+        except (zookeeper.NoNodeException, AttributeError):
             pass
         return False
 
