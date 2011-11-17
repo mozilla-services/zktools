@@ -33,7 +33,15 @@
 # the terms of any one of the MPL, the GPL or the LGPL.
 #
 # ***** END LICENSE BLOCK *****
-"""Zookeeper Locking"""
+"""Zookeeper Locking
+
+This module provides a :class:`ZkLock`, which should look familiar to anyone
+that has used Python's ``threading.Lock`` class. In addition to normal locking
+behavior, expiring locks are also supported.
+
+
+
+"""
 import logging
 import threading
 import time
@@ -57,10 +65,8 @@ class ZkLock(object):
         from zktools.connection import ZkConnection
         from zktools.locking import ZkLock
 
-        # Create and open the connection
+        # Create a connection and a lock
         conn = ZkConnection()
-        conn.connect()
-
         my_lock = ZkLock(conn, "my_lock_name")
 
         my_lock.acquire() # wait to acquire lock
@@ -235,7 +241,7 @@ class ZkLock(object):
             self.zk.delete(self.locks.lock_node)
             del self.locks.lock_node
             return True
-        except zookeeper.NoNodeException:
+        except (zookeeper.NoNodeException, AttributeError):
             return False
 
     def renew(self):
