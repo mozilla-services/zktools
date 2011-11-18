@@ -12,3 +12,9 @@ Module Contents
 
 .. autoclass:: SharedZkLock
 	:members: acquire_read_lock, acquire_write_lock, revoked, has_lock, release
+
+Internal Utility Functions
+~~~~~~~~~~~~~~~~~~~~~~~~~~
+
+.. autofunction:: has_read_lock
+.. autofunction:: has_write_lock

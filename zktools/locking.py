@@ -266,6 +266,9 @@ class SharedZkLock(ZkLock):
     write-lock is only succesful if there are no read or write locks
     active.
 
+    This class takes the same initialization parameters as
+    :class:`ZkLock`.
+
     """
     def __init__(self, *args, **kwargs):
         super(SharedZkLock, self).__init__(*args, **kwargs)
@@ -448,7 +451,15 @@ class SharedZkLock(ZkLock):
 
 
 def has_read_lock(keyname, children):
-    """Determines if this keyname has a valid read lock"""
+    """Determines if this keyname has a valid read lock
+
+    :param keyname: The keyname without full path prefix of the current node
+                    being examined
+    :type keyname: str
+    :param children: List of the children nodes at this lock point
+    :type children: list
+
+    """
     prior_nodes = children[:children.index(keyname)]
     prior_write_nodes = [x for x in prior_nodes if \
                          x.startswith('write-')]
@@ -459,7 +470,15 @@ def has_read_lock(keyname, children):
 
 
 def has_write_lock(keyname, children):
-    """Determines if this keyname has a valid write lock"""
+    """Determines if this keyname has a valid write lock
+
+    :param keyname: The keyname without full path prefix of the current node
+                    being examined
+    :type keyname: str
+    :param children: List of the children nodes at this lock point
+    :type children: list
+
+    """
     if keyname == children[0]:
         return True, None
     return False, children[:children.index(keyname)]
