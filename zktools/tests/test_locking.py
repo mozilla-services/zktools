@@ -151,6 +151,65 @@ class TestLocking(unittest.TestCase):
             self.assertEqual(len(mock_conn.method_calls), 4)
 
 
+class TestSharedLock(unittest.TestCase):
+    def makeOne(self, *args, **kwargs):
+        from zktools.locking import SharedZkLock
+        return SharedZkLock(*args, **kwargs)
+
+    def test_read_lock_success(self):
+        mock_conn = mock.Mock()
+        mock_conn.cv = mock.Mock()
+        mock_zc = mock.Mock()
+        mock_conn.create.side_effect = sequence(
+            '/ZktoolsLocks',
+            '/ZktoolsLocks/lock',
+            '/ZktoolsLocks/lock/read-lock0001'
+        )
+        mock_conn.get_children.return_value = ['read-lock0001']
+        mock_conn.get.return_value = (None, None)
+
+        lock = self.makeOne(mock_conn, 'lock')
+        with mock.patch('zktools.connection.zookeeper', mock_zc):
+            self.assertEqual(lock.acquire_read_lock(), True)
+            self.assertEqual(lock.release(), True)
+
+    def test_write_lock_success(self):
+        mock_conn = mock.Mock()
+        mock_conn.cv = mock.Mock()
+        mock_zc = mock.Mock()
+        mock_conn.create.side_effect = sequence(
+            '/ZktoolsLocks',
+            '/ZktoolsLocks/lock',
+            '/ZktoolsLocks/lock/write-lock0001'
+        )
+        mock_conn.get_children.return_value = ['write-lock0001']
+        mock_conn.get.return_value = (None, None)
+
+        lock = self.makeOne(mock_conn, 'lock')
+        with mock.patch('zktools.connection.zookeeper', mock_zc):
+            self.assertEqual(lock.acquire_write_lock(), True)
+            self.assertEqual(lock.release(), True)
+
+    def test_read_lock_failure_noblocking(self):
+        mock_conn = mock.Mock()
+        mock_conn.cv = mock.Mock()
+        mock_zc = mock.Mock()
+        mock_conn.create.side_effect = sequence(
+            '/ZktoolsLocks',
+            '/ZktoolsLocks/lock',
+            '/ZktoolsLocks/lock/read-lock0003'
+        )
+        mock_conn.get_children.return_value = [
+            'write-lock0001', 'read-lock0002'
+        ]
+        mock_conn.get.return_value = (None, None)
+
+        lock = self.makeOne(mock_conn, 'lock')
+        with mock.patch('zktools.connection.zookeeper', mock_zc):
+            self.assertEqual(lock.acquire_read_lock(timeout=0), False)
+
+
+
 def sequence(*args):
     orig_values = args
     values = list(reversed(args))
