@@ -107,14 +107,9 @@ class TestLocking(unittest.TestCase):
 
         lock = self.makeOne(mock_conn, 'lock')
 
-        def release_wait(prior_node, func):
-            func(0, 0, 0, 0)
-
-        mock_conn.exists.side_effect = release_wait
-
         with mock.patch('zktools.connection.zookeeper', mock_zc):
             self.assertEqual(lock.acquire(timeout=0), False)
-            self.assertEqual(len(mock_conn.method_calls), 4)
+            self.assertEqual(len(mock_conn.method_calls), 6)
 
     def test_lock_revoked_upon_acquiring(self):
         """Test that we handle it if we acquired the lock, but then
@@ -197,7 +192,7 @@ class TestSharedLock(unittest.TestCase):
         mock_conn.create.side_effect = sequence(
             '/ZktoolsLocks',
             '/ZktoolsLocks/lock',
-            '/ZktoolsLocks/lock/read-lock0003'
+            '/ZktoolsLocks/lock/read-lock0002'
         )
         mock_conn.get_children.return_value = [
             'write-lock0001', 'read-lock0002'
@@ -208,6 +203,23 @@ class TestSharedLock(unittest.TestCase):
         with mock.patch('zktools.connection.zookeeper', mock_zc):
             self.assertEqual(lock.acquire_read_lock(timeout=0), False)
 
+    def test_write_lock_failure_noblocking(self):
+        mock_conn = mock.Mock()
+        mock_conn.cv = mock.Mock()
+        mock_zc = mock.Mock()
+        mock_conn.create.side_effect = sequence(
+            '/ZktoolsLocks',
+            '/ZktoolsLocks/lock',
+            '/ZktoolsLocks/lock/write-lock0002',
+        )
+        mock_conn.get_children.return_value = [
+            'read-lock0001', 'write-lock0002'
+        ]
+        mock_conn.get.return_value = (None, None)
+
+        lock = self.makeOne(mock_conn, 'lock')
+        with mock.patch('zktools.connection.zookeeper', mock_zc):
+            self.assertEqual(lock.acquire_write_lock(timeout=0), False)
 
 
 def sequence(*args):

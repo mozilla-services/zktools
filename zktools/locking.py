@@ -139,7 +139,7 @@ class ZkLock(object):
 
         """
         # Create a lock node
-        znode = self.zk.create(self.locknode + '/lock-', "0",
+        znode = self.zk.create(self.locknode + '/lock', "0",
                                [ZOO_OPEN_ACL_UNSAFE],
                                zookeeper.EPHEMERAL | zookeeper.SEQUENCE)
         keyname = znode[znode.rfind('/') + 1:]
@@ -151,16 +151,18 @@ class ZkLock(object):
             cv.set()
 
         lock_start = time.time()
+        first_run = True
         while not acquired:
             cv.clear()
 
             # Have we been at this longer than the timeout?
-            if timeout is not None and time.time() - lock_start > timeout:
-                try:
-                    self.zk.delete(znode)
-                except zookeeper.NoNodeException:
-                    pass
-                return False
+            if not first_run:
+                if timeout is not None and time.time() - lock_start > timeout:
+                    try:
+                        self.zk.delete(znode)
+                    except zookeeper.NoNodeException:
+                        pass
+                    return False
 
             # Get all the children of the node
             children = self.zk.get_children(self.locknode)
@@ -192,12 +194,12 @@ class ZkLock(object):
 
             # Wait for a notification from get_children, no longer
             # than the timeout
-            if timeout:
+            wait_for = None
+            if timeout is not None:
                 time_spent = time.time() - lock_start
                 wait_for = timeout - time_spent
-            else:
-                wait_for = None
             cv.wait(wait_for)
+            first_run = False
         self.locks.lock_node = znode
         return True
 
@@ -354,16 +356,18 @@ class SharedZkLock(ZkLock):
             cv.set()
 
         lock_start = time.time()
+        first_run = True
         while not acquired:
             cv.clear()
 
             # Have we been at this longer than the timeout?
-            if timeout is not None and time.time() - lock_start > timeout:
-                try:
-                    self.zk.delete(znode)
-                except zookeeper.NoNodeException:
-                    pass
-                return False
+            if not first_run:
+                if timeout is not None and time.time() - lock_start > timeout:
+                    try:
+                        self.zk.delete(znode)
+                    except zookeeper.NoNodeException:
+                        pass
+                    return False
 
             # Get all the children of the node
             children = self.zk.get_children(self.locknode)
@@ -388,12 +392,12 @@ class SharedZkLock(ZkLock):
 
             # Wait for a notification from get_children, no longer
             # than the timeout
-            if timeout:
+            wait_for = None
+            if timeout is not None:
                 time_spent = time.time() - lock_start
                 wait_for = timeout - time_spent
-            else:
-                wait_for = None
             cv.wait(wait_for)
+            first_run = False
         self.locks.lock_node = znode
         return True
 
