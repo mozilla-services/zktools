@@ -103,7 +103,6 @@ class ZkLock(object):
         self.lock_root = lock_root
         self.locks = threading.local()
         self.log_debug = logging.DEBUG >= log.getEffectiveLevel()
-        self.revoked = False
         if logfile:
             zookeeper.set_log_stream(open(logfile))
         else:
@@ -253,7 +252,10 @@ class ZkLock(object):
         """
         children = self.zk.get_children(self.locknode)
         for child in children:
-            self.zk.delete(self.lock_root + '/' + child)
+            try:
+                self.zk.delete(self.lock_root + '/' + child)
+            except zookeeper.NoNodeException:
+                pass
 
 
 class SharedZkLock(ZkLock):
@@ -267,55 +269,49 @@ class SharedZkLock(ZkLock):
     """
     def __init__(self, *args, **kwargs):
         super(SharedZkLock, self).__init__(*args, **kwargs)
-        self.locks.revoked = False
+        self.locks.revoked = []
 
-    def acquire_read_lock(self, timeout=None):
+    def acquire_read_lock(self, timeout=None, revoke=False):
         """Acquire a shared read lock
 
         :param timeout: How long to wait to acquire the lock, set to 0 to
                         get non-blocking behavior.
         :type timeout: int
+        :param revoke: Whether prior locks should be revoked. Can be set to
+                       True to request and wait for prior locks to release
+                       their lock, or ``immediate`` to destroy the blocking
+                       write locks and attempt to acquire a read lock.
+        :type revoke: bool or ``immediate``
 
         :returns: True if the lock was acquired, False otherwise
         :rtype: bool
 
         """
         node_name = '/read-'
+        self.locks.has_lock = has_read_lock
+        return self._acquire_lock(node_name, timeout, revoke)
 
-        def has_lock(keyname, children):
-            prior_nodes = children[:children.index(keyname)]
-            prior_write_nodes = [x for x in prior_nodes if \
-                                 x.startswith('write-')]
-
-            if not prior_write_nodes:
-                return True, None
-            else:
-                return False, self.locknode + '/' + prior_write_nodes[-1]
-        return self._acquire_lock(node_name, has_lock, timeout)
-
-    def acquire_write_lock(self, timeout=None):
+    def acquire_write_lock(self, timeout=None, revoke=False):
         """Acquire a shared write lock
 
         :param timeout: How long to wait to acquire the lock, set to 0 to
                         get non-blocking behavior.
         :type timeout: int
+        :param revoke: Whether prior locks should be revoked. Can be set to
+                       True to request and wait for prior locks to release
+                       their lock, or ``immediate`` to destroy the blocking
+                       read/write locks and attempt to acquire a write lock.
+        :type revoke: bool or ``immediate``
 
         :returns: True if the lock was acquired, False otherwise
         :rtype: bool
 
         """
         node_name = '/write-'
+        self.locks.has_lock = has_write_lock
+        return self._acquire_lock(node_name, timeout, revoke)
 
-        def has_lock(keyname, children):
-            if keyname == children[0]:
-                return True, None
-
-            prior_node = children[children.index(keyname) - 1]
-            prior_node = self.locknode + '/' + prior_node
-            return False, prior_node
-        return self._acquire_lock(node_name, has_lock, timeout)
-
-    def _acquire_lock(self, node_name, has_lock, timeout=None):
+    def _acquire_lock(self, node_name, timeout=None, revoke=False):
         """Acquire a lock
 
         Internal function used by read/write lock
@@ -336,11 +332,13 @@ class SharedZkLock(ZkLock):
         :rtype: bool
 
         """
+        revoke_lock = self.locks.revoked
+
         def revoke_watcher(handle, type, state, path):
             if type == zookeeper.CHANGED_EVENT:
                 data, info = self.zk.get(path, revoke_watcher)
                 if data == 'unlock':
-                    self.locks.revoked = True
+                    revoke_lock.append(True)
 
         # Create a lock node
         znode = self.zk.create(self.locknode + node_name, "0",
@@ -381,11 +379,27 @@ class SharedZkLock(ZkLock):
                 keyname = znode[znode.rfind('/') + 1:]
                 data, info = self.zk.get(znode, revoke_watcher)
                 continue
-            acquired, watch_node = has_lock(keyname, children)
+            acquired, blocking_nodes = self.locks.has_lock(keyname, children)
             if acquired:
                 break
 
-            exists = self.zk.exists(watch_node, lock_watcher)
+            if revoke == 'immediate':
+                # Remove all prior nodes
+                for node in blocking_nodes:
+                    try:
+                        self.zk.delete(self.locknode + '/' + node)
+                    except zookeeper.NoNodeException:
+                        pass
+                continue  # Now try again
+            elif revoke:
+                # Ask all prior nodes to release
+                for node in blocking_nodes:
+                    try:
+                        self.zk.set(self.locknode + '/' + node, "unlock")
+                    except zookeeper.NoNodeException:
+                        pass
+            prior_blocking_node = self.locknode + '/' + blocking_nodes[-1]
+            exists = self.zk.exists(prior_blocking_node, lock_watcher)
             if not exists:
                 # The node disappeared? Rinse and repeat.
                 continue
@@ -407,4 +421,45 @@ class SharedZkLock(ZkLock):
         :returns: True if the lock has been revoked, False otherwise.
         :rtype: bool
         """
-        return self.locks.revoked
+        return bool(self.locks.revoked)
+
+    def has_lock(self):
+        """Check with Zookeeper to see if the lock is acquired
+
+        :returns: Whether the lock is acquired or not
+        :rtype: bool
+
+        """
+        znode = self.locks.lock_node
+        keyname = znode[znode.rfind('/') + 1:]
+        # Get all the children of the node
+        children = self.zk.get_children(self.locknode)
+        children.sort(key=lambda val: val[val.rfind('-') + 1:])
+        if keyname not in children:
+            return False
+
+        acquired = self.locks.has_lock(keyname, children)[0]
+        return bool(acquired)
+
+    def release(self):
+        """Release the lock"""
+        self.locks.revoked = []
+        return super(SharedZkLock, self).release()
+
+
+def has_read_lock(keyname, children):
+    """Determines if this keyname has a valid read lock"""
+    prior_nodes = children[:children.index(keyname)]
+    prior_write_nodes = [x for x in prior_nodes if \
+                         x.startswith('write-')]
+    if not prior_write_nodes:
+        return True, None
+    else:
+        return False, prior_write_nodes
+
+
+def has_write_lock(keyname, children):
+    """Determines if this keyname has a valid write lock"""
+    if keyname == children[0]:
+        return True, None
+    return False, children[:children.index(keyname)]
