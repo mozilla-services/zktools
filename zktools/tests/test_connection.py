@@ -58,8 +58,6 @@ class TestConnection(unittest.TestCase):
             self.assertEqual(zkc.get('/some/key'), 'stillworks')
 
     def test_connect_automatically(self):
-        zkc = self.makeOne()
-        zkc.cv = mock.Mock()
         mock_zc = mock.Mock()
         mock_init = mock_zc.init
         mock_init.side_effect = async_connect
@@ -69,6 +67,8 @@ class TestConnection(unittest.TestCase):
         mock_zc.get.return_value = 'works'
 
         with mock.patch('zktools.connection.zookeeper', mock_zc):
+            zkc = self.makeOne()
+            zkc.cv = mock.Mock()
             self.assertEqual(zkc.get('/some/key'), 'works')
 
 
@@ -87,7 +87,6 @@ def sequence(*args):
             print orig_values
             raise
     return return_value
-
 
 
 def async_connect(host, func, timeout):
