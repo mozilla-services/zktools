@@ -133,7 +133,7 @@ class _LockBase(object):
 
         def revoke_watcher(handle, type, state, path):
             if type == zookeeper.CHANGED_EVENT:
-                data, info = self.zk.get(path, revoke_watcher)
+                data = self.zk.get(path, revoke_watcher)[0]
                 if data == 'unlock':
                     revoke_lock.append(True)
 
@@ -141,7 +141,7 @@ class _LockBase(object):
         znode = self.zk.create(self.locknode + node_name, "0",
                                [ZOO_OPEN_ACL_UNSAFE],
                                zookeeper.EPHEMERAL | zookeeper.SEQUENCE)
-        data, info = self.zk.get(znode, revoke_watcher)
+        data = self.zk.get(znode, revoke_watcher)[0]
         if data == 'unlock':
             revoke_lock.append(True)
         keyname = znode[znode.rfind('/') + 1:]
@@ -176,7 +176,7 @@ class _LockBase(object):
                     self.locknode + node_name, "0", [ZOO_OPEN_ACL_UNSAFE],
                     zookeeper.EPHEMERAL | zookeeper.SEQUENCE)
                 keyname = znode[znode.rfind('/') + 1:]
-                data, info = self.zk.get(znode, revoke_watcher)
+                data = self.zk.get(znode, revoke_watcher)[0]
                 if data == 'unlock':
                     revoke_lock.append(True)
                 continue
