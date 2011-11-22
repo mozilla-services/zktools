@@ -56,6 +56,7 @@ import zookeeper
 
 
 ZOO_OPEN_ACL_UNSAFE = {"perms": 0x1f, "scheme": "world", "id": "anyone"}
+IMMEDIATE = object()
 
 log = logging.getLogger(__name__)
 
@@ -114,9 +115,9 @@ class _LockBase(object):
         :type timeout: int
         :param revoke: Whether prior locks should be revoked. Can be set to
                        True to request and wait for prior locks to release
-                       their lock, or ``immediate`` to destroy the blocking
+                       their lock, or :obj:`immediate` to destroy the blocking
                        read/write locks and attempt to acquire a write lock.
-        :type revoke: bool or ``immediate``
+        :type revoke: bool or :obj:`immediate`
 
 
         :returns: True if the lock was acquired, False otherwise
@@ -178,7 +179,7 @@ class _LockBase(object):
             if acquired:
                 break
 
-            if revoke == 'immediate':
+            if revoke == IMMEDIATE:
                 # Remove all prior nodes
                 for node in blocking_nodes:
                     try:
