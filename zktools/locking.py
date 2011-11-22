@@ -109,12 +109,6 @@ class _LockBase(object):
 
         :param node_name: Name of the node to use for the lock
         :type node_name: str
-        :param has_lock: Function called to determine if the lock has
-                         been acquired. The function should return a tuple
-                         with either (True, None), or (False, NODENAME) where
-                         NODENAME is the name of the node that should be
-                         watched before repeating.
-        :type has_lock: function
         :param timeout: How long to wait to acquire the lock, set to 0 to
                         get non-blocking behavior.
         :type timeout: int
