@@ -333,10 +333,6 @@ class SharedZkLock(_LockBase):
     :class:`ZkLock`.
 
     """
-    def __init__(self, *args, **kwargs):
-        super(SharedZkLock, self).__init__(*args, **kwargs)
-        self.locks.revoked = []
-
     def acquire_read_lock(self, timeout=None, revoke=False):
         """Acquire a shared read lock
 
