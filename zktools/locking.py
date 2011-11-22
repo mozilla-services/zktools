@@ -73,10 +73,6 @@ class _LockBase(object):
         :type lock_root: string
         :param logfile: Path to a file to log the zookeeper stream to
         :type logfile: string
-        :param lock_timeout: Setting a lock_timeout makes this lock
-                             revocable and it will be considered invalid
-                             after this timeout
-        :type lock_timeout: int
 
         """
         self.zk = connection
@@ -122,6 +118,12 @@ class _LockBase(object):
         :param timeout: How long to wait to acquire the lock, set to 0 to
                         get non-blocking behavior.
         :type timeout: int
+        :param revoke: Whether prior locks should be revoked. Can be set to
+                       True to request and wait for prior locks to release
+                       their lock, or ``immediate`` to destroy the blocking
+                       read/write locks and attempt to acquire a write lock.
+        :type revoke: bool or ``immediate``
+
 
         :returns: True if the lock was acquired, False otherwise
         :rtype: bool
@@ -140,6 +142,8 @@ class _LockBase(object):
                                [ZOO_OPEN_ACL_UNSAFE],
                                zookeeper.EPHEMERAL | zookeeper.SEQUENCE)
         data, info = self.zk.get(znode, revoke_watcher)
+        if data == 'unlock':
+            revoke_lock.append(True)
         keyname = znode[znode.rfind('/') + 1:]
 
         acquired = False
@@ -173,6 +177,8 @@ class _LockBase(object):
                     zookeeper.EPHEMERAL | zookeeper.SEQUENCE)
                 keyname = znode[znode.rfind('/') + 1:]
                 data, info = self.zk.get(znode, revoke_watcher)
+                if data == 'unlock':
+                    revoke_lock.append(True)
                 continue
             acquired, blocking_nodes = self.locks.has_lock(keyname, children)
             if acquired:
