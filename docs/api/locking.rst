@@ -7,11 +7,14 @@
 Module Contents
 ---------------
 
+.. autoclass:: _LockBase
+    :members: __init__, _acquire_lock, release, revoked, has_lock, clear
+
 .. autoclass:: ZkLock
-    :members: __init__, acquire, renew, release, has_lock, clear
+    :members: __init__, acquire, release, revoked, has_lock, clear
 
 .. autoclass:: SharedZkLock
-	:members: acquire_read_lock, acquire_write_lock, revoked, has_lock, release
+	:members: __init__, acquire_read_lock, acquire_write_lock, revoked, has_lock, release, clear
 
 Internal Utility Functions
 ~~~~~~~~~~~~~~~~~~~~~~~~~~
