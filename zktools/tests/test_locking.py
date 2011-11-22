@@ -18,6 +18,7 @@ class TestLocking(unittest.TestCase):
             '/ZktoolsLocks/lock/lock0001'
         )
         mock_conn.get_children.return_value = ['lock0001']
+        mock_conn.get.return_value = (None, None)
 
         lock = self.makeOne(mock_conn, 'lock')
         with mock.patch('zktools.connection.zookeeper', mock_zc):
@@ -39,6 +40,7 @@ class TestLocking(unittest.TestCase):
         mock_conn.get_children.side_effect = sequence(
             [], ['lock0002']
         )
+        mock_conn.get.return_value = (None, None)
 
         lock = self.makeOne(mock_conn, 'lock')
         with mock.patch('zktools.connection.zookeeper', mock_zc):
@@ -60,6 +62,7 @@ class TestLocking(unittest.TestCase):
         mock_conn.get_children.side_effect = sequence(
             ['lock0001'], ['lock0001']
         )
+        mock_conn.get.return_value = (None, None)
 
         lock = self.makeOne(mock_conn, 'lock')
         with mock.patch('zktools.connection.zookeeper', mock_zc):
@@ -79,6 +82,7 @@ class TestLocking(unittest.TestCase):
         mock_conn.get_children.side_effect = sequence(
             ['lock0001', 'lock0002'], ['lock0002']
         )
+        mock_conn.get.return_value = (None, None)
 
         lock = self.makeOne(mock_conn, 'lock')
 
@@ -90,7 +94,7 @@ class TestLocking(unittest.TestCase):
         with mock.patch('zktools.connection.zookeeper', mock_zc):
             self.assertEqual(lock.acquire(), True)
             self.assertEqual(lock.release(), True)
-            self.assertEqual(len(mock_conn.method_calls), 7)
+            self.assertEqual(len(mock_conn.method_calls), 8)
 
     def test_no_blocking(self):
         mock_conn = mock.Mock()
@@ -104,12 +108,13 @@ class TestLocking(unittest.TestCase):
         mock_conn.get_children.side_effect = sequence(
             ['lock0001', 'lock0002'],
         )
+        mock_conn.get.return_value = (None, None)
 
         lock = self.makeOne(mock_conn, 'lock')
 
         with mock.patch('zktools.connection.zookeeper', mock_zc):
             self.assertEqual(lock.acquire(timeout=0), False)
-            self.assertEqual(len(mock_conn.method_calls), 6)
+            self.assertEqual(len(mock_conn.method_calls), 7)
 
     def test_lock_revoked_upon_acquiring(self):
         """Test that we handle it if we acquired the lock, but then
@@ -126,6 +131,7 @@ class TestLocking(unittest.TestCase):
         mock_conn.get_children.side_effect = sequence(
             ['lock0001'], ['lock0002']
         )
+        mock_conn.get.return_value = (None, None)
 
         # We can't fake the zookeeper exception apparently
         import zookeeper
@@ -138,7 +144,7 @@ class TestLocking(unittest.TestCase):
 
         with mock.patch('zktools.connection.zookeeper', mock_zc):
             self.assertEqual(lock.acquire(), True)
-            self.assertEqual(len(mock_conn.method_calls), 4)
+            self.assertEqual(len(mock_conn.method_calls), 5)
 
 
 class TestSharedLock(unittest.TestCase):
