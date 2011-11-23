@@ -122,4 +122,12 @@ class ZkConnection(object):
                     zookeeper.SessionMovedException):
                 self.connect()
                 return zoo_func(self.handle, *args, **kwargs)
+        call_func.__doc__ = zoo_func.__doc__
+
+        # Set this function on ourself so that further calls bypass
+        # getattr
+        setattr(self, name, call_func)
         return call_func
+
+    def __dir__(self):
+        return self.__dict__.keys() + zookeeper.__dict__.keys()

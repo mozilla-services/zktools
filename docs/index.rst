@@ -10,7 +10,7 @@ It currently provides:
 * A :class:`Zookeeper Connection <zktools.connection.ZkConnection>` object that
   handles proxying calls to zookeeper using the correct zookeeper handle, and 
   re-establishing the connection during connection loss in a call.
-* A :class:`Zookeeper lock <zktools.locking.ZkLock>` with support for
+* A :mod:`Zookeeper lock <zktools.locking>` with support for
   non-blocking acquire, modeled on Python's Lock objects that also includes a
   `Revocable Shared Locks with Freaking Laser Beams` described in the 
   `Zookeeper Recipe's 
