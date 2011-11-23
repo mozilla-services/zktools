@@ -37,15 +37,17 @@
 
 This module provides a :class:`ZkLock`, which should look familiar to anyone
 that has used Python's ``threading.Lock`` class. In addition to normal locking
-behavior, revokable shared read/write locks with are also supported.
+behavior, revokable shared read/write locks with are also supported. Both the
+:class:`ZkLock` and :class:`SharedZkLock` can be revoked as desired. This
+requires the current lock holder(s) to release their lock(s).
 
-Shared Revokable Locks
-======================
+Shared Read/Write Locks
+=======================
 
 Also known in the Zookeeper Recipes as ``Revocable Shared Locks with Freaking
-Laser Beams``, are a lock implementation where another client can ask the
-lock holder to give up the lock. This requires the current lock owner to
-voluntarilly release the lock when requested to do so.
+Laser Beams``, :class:`SharedZkLock`'s support read and write locks. A read
+lock can be acquired as long as no write locks are active, while a write-lock
+can only be acquired when there are no other read or write locks active.
 
 """
 import logging
