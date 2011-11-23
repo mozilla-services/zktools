@@ -14,6 +14,8 @@ It currently provides:
   Lock objects that also includes a `Revocable Shared Locks with Freaking Laser
   Beams` described in the `Zookeeper Recipe's <http://zookeeper.apache.org/doc/current/recipes.html#sc_recoverableSharedLocks>`_.
 
+See `the full docs`_ for more  information.
+
 License
 =======
 
@@ -25,3 +27,4 @@ Authors
 ``zktools`` is made available by the `Mozilla Foundation`.
 
 .. _Apache Zookeeper: http://zookeeper.apache.org/
+.. _the full docs: http://zktools.rtfd.org/
