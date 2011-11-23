@@ -117,9 +117,9 @@ class _LockBase(object):
         :type timeout: int
         :param revoke: Whether prior locks should be revoked. Can be set to
                        True to request and wait for prior locks to release
-                       their lock, or :obj:`immediate` to destroy the blocking
+                       their lock, or :obj:`IMMEDIATE` to destroy the blocking
                        read/write locks and attempt to acquire a write lock.
-        :type revoke: bool or :obj:`immediate`
+        :type revoke: bool or :obj:``
 
 
         :returns: True if the lock was acquired, False otherwise
@@ -305,9 +305,9 @@ class ZkLock(_LockBase):
         :type timeout: int
         :param revoke: Whether prior locks should be revoked. Can be set to
                        True to request and wait for prior locks to release
-                       their lock, or :obj:`immediate` to destroy the blocking
+                       their lock, or :obj:`IMMEDIATE` to destroy the blocking
                        read/write locks and attempt to acquire a write lock.
-        :type revoke: bool or :obj:`immediate`
+        :type revoke: bool or :obj:`IMMEDIATE`
 
         :returns: True if the lock was acquired, False otherwise
         :rtype: bool
@@ -338,9 +338,9 @@ class SharedZkLock(_LockBase):
         :type timeout: int
         :param revoke: Whether prior locks should be revoked. Can be set to
                        True to request and wait for prior locks to release
-                       their lock, or :obj:`immediate` to destroy the blocking
+                       their lock, or :obj:`IMMEDIATE` to destroy the blocking
                        write locks and attempt to acquire a read lock.
-        :type revoke: bool or :obj:`immediate`
+        :type revoke: bool or :obj:`IMMEDIATE`
 
         :returns: True if the lock was acquired, False otherwise
         :rtype: bool
@@ -358,9 +358,9 @@ class SharedZkLock(_LockBase):
         :type timeout: int
         :param revoke: Whether prior locks should be revoked. Can be set to
                        True to request and wait for prior locks to release
-                       their lock, or :obj:`immediate` to destroy the blocking
+                       their lock, or :obj:`IMMEDIATE` to destroy the blocking
                        read/write locks and attempt to acquire a write lock.
-        :type revoke: bool or :obj:`immediate`
+        :type revoke: bool or :obj:`IMMEDIATE`
 
         :returns: True if the lock was acquired, False otherwise
         :rtype: bool
