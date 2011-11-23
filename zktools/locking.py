@@ -387,7 +387,7 @@ class SharedZkLock(ZkLock):
                 break
 
             if revoke == 'immediate':
-                # Remove all prior nodes
+                # Remove all prior blocking nodes
                 for node in blocking_nodes:
                     try:
                         self.zk.delete(self.locknode + '/' + node)
@@ -395,7 +395,7 @@ class SharedZkLock(ZkLock):
                         pass
                 continue  # Now try again
             elif revoke:
-                # Ask all prior nodes to release
+                # Ask all prior blocking nodes to release
                 for node in blocking_nodes:
                     try:
                         self.zk.set(self.locknode + '/' + node, "unlock")
