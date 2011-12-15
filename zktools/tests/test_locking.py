@@ -23,9 +23,9 @@ class TestLocking(unittest.TestCase):
         lock = self.makeOne(mock_conn, 'lock')
         with mock.patch('zktools.connection.zookeeper', mock_zc):
             result = lock.acquire()
-            self.assertEqual(result, True)
+            self.assertEqual(bool(result), True)
             result = lock.release()
-            self.assertEqual(result, True)
+            self.assertEqual(bool(result), True)
 
     def test_lock_disconnect_issue(self):
         mock_conn = mock.Mock()
@@ -45,9 +45,9 @@ class TestLocking(unittest.TestCase):
         lock = self.makeOne(mock_conn, 'lock')
         with mock.patch('zktools.connection.zookeeper', mock_zc):
             result = lock.acquire()
-            self.assertEqual(result, True)
+            self.assertEqual(bool(result), True)
             result = lock.release()
-            self.assertEqual(result, True)
+            self.assertEqual(bool(result), True)
 
     def test_lock_has_lock(self):
         mock_conn = mock.Mock()
@@ -66,9 +66,9 @@ class TestLocking(unittest.TestCase):
 
         lock = self.makeOne(mock_conn, 'lock')
         with mock.patch('zktools.connection.zookeeper', mock_zc):
-            self.assertEqual(lock.acquire(), True)
-            self.assertEqual(lock.has_lock(), True)
-            self.assertEqual(lock.release(), True)
+            self.assertEqual(bool(lock.acquire()), True)
+            self.assertEqual(bool(lock.has_lock()), True)
+            self.assertEqual(bool(lock.release()), True)
 
     def test_lock_wait(self):
         mock_conn = mock.Mock()
@@ -92,8 +92,8 @@ class TestLocking(unittest.TestCase):
         mock_conn.exists.side_effect = release_wait
 
         with mock.patch('zktools.connection.zookeeper', mock_zc):
-            self.assertEqual(lock.acquire(), True)
-            self.assertEqual(lock.release(), True)
+            self.assertEqual(bool(lock.acquire()), True)
+            self.assertEqual(bool(lock.release()), True)
             self.assertEqual(len(mock_conn.method_calls), 8)
 
     def test_no_blocking(self):
@@ -143,7 +143,7 @@ class TestLocking(unittest.TestCase):
         lock = self.makeOne(mock_conn, 'lock')
 
         with mock.patch('zktools.connection.zookeeper', mock_zc):
-            self.assertEqual(lock.acquire(), True)
+            self.assertEqual(bool(lock.acquire()), True)
             self.assertEqual(len(mock_conn.method_calls), 5)
 
 
@@ -166,7 +166,7 @@ class TestSharedLock(unittest.TestCase):
 
         lock = self.makeOne(mock_conn, 'lock')
         with mock.patch('zktools.connection.zookeeper', mock_zc):
-            self.assertEqual(lock.acquire_read_lock(), True)
+            self.assertEqual(bool(lock.acquire_read_lock()), True)
             self.assertEqual(lock.release(), True)
 
     def test_write_lock_success(self):
@@ -183,7 +183,7 @@ class TestSharedLock(unittest.TestCase):
 
         lock = self.makeOne(mock_conn, 'lock')
         with mock.patch('zktools.connection.zookeeper', mock_zc):
-            self.assertEqual(lock.acquire_write_lock(), True)
+            self.assertEqual(bool(lock.acquire_write_lock()), True)
             self.assertEqual(lock.release(), True)
 
     def test_read_lock_failure_noblocking(self):
@@ -222,7 +222,7 @@ class TestSharedLock(unittest.TestCase):
 
         lock = self.makeOne(mock_conn, 'lock')
         with mock.patch('zktools.connection.zookeeper', mock_zc):
-            self.assertEqual(lock.acquire_write_lock(revoke=IMMEDIATE), True)
+            self.assertEqual(bool(lock.acquire_write_lock(revoke=IMMEDIATE)), True)
             self.assertEqual(lock.release(), True)
             self.assertEqual(len(mock_conn.method_calls), 9)
 
@@ -244,7 +244,7 @@ class TestSharedLock(unittest.TestCase):
 
         lock = self.makeOne(mock_conn, 'lock')
         with mock.patch('zktools.connection.zookeeper', mock_zc):
-            self.assertEqual(lock.acquire_write_lock(revoke=True), True)
+            self.assertEqual(bool(lock.acquire_write_lock(revoke=True)), True)
             self.assertEqual(lock.release(), True)
             self.assertEqual(len(mock_conn.method_calls), 10)
 
@@ -283,7 +283,7 @@ class TestSharedLock(unittest.TestCase):
 
         lock = self.makeOne(mock_conn, 'lock')
         with mock.patch('zktools.connection.zookeeper', mock_zc):
-            self.assertEqual(lock.acquire_read_lock(), True)
+            self.assertEqual(bool(lock.acquire_read_lock()), True)
 
     def test_clear_lock(self):
         mock_conn = mock.Mock()
