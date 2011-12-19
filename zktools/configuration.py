@@ -41,12 +41,20 @@ boolean, int, decimal, or date/datetime will be automatically coerced
 into the appropriate Python objects.
 
 """
+import decimal
+import re
+
 import zookeeper
 
-from zktools.util import dumps
-from zktools.util import loads
-
 ZOO_OPEN_ACL_UNSAFE = {"perms": 0x1f, "scheme": "world", "id": "anyone"}
+
+
+CONVERSIONS = {
+    re.compile(r'^\d\.\d+$'): decimal.Decimal,
+    re.compile(r'^\d+$'): int,
+    re.compile(r'^true$', re.IGNORECASE): lambda x: True,
+    re.compile(r'^false$', re.IGNORECASE): lambda x: False,
+}
 
 
 class ZkConfig(dict):
@@ -83,10 +91,6 @@ class ZkConfig(dict):
                             will not be created unless ``create_intermediary``
                             is ``True``.
         :type config_path: str
-        :param create_intermediary: Whether intermediary nodes to the
-                                    ``config_path`` will be created if they do
-                                    not already exist.
-        :type create_intermediary: bool
 
         """
         root_node = config_path[config_path.rfind('/'):]
@@ -94,31 +98,21 @@ class ZkConfig(dict):
         self.config_path = config_path
 
         # This happens if the config_path is not a nested node
-        if root_node == config_path:
-            return
-
-        if not create_intermediary and not connection.exists(root_node):
+        if root_node != config_path and not connection.exists(root_node):
             raise Exception("Path to 'config_path' does not exist.")
-
-    def _create_node(self):
-        """Create the node, and path to it if needed"""
-        parts = reversed(self.config_path[1:].split('/'))
-        path = ''
-        while parts:
-            path = path + '/' + parts.pop()
-            try:
-                self.zk.create(path, "Config", [ZOO_OPEN_ACL_UNSAFE], 0)
-            except zookeeper.NodeExistsException:
-                # Ok if this just got created by someone else for some
-                # other reason, ie, other config under the same tree
-                pass
 
     def load(self):
         """Load configuration from zookeeper"""
         if not self.zk.exists(self.config_path):
             raise Exception("No existing configuration found at path: %s" %
                             self.config_path)
-        self.update(loads(self.zk.get(self.config_path)))
+
+        # First determine if its a sequence (list), or keys (dict)
+        
 
     def save(self):
         self.zk.set(self.config_path, dumps(self))
+
+    def copy(self):
+        """Return a dict of ourself, not a ZkConfig object"""
+        return dict(self.items())
