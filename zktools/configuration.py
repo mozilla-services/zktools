@@ -151,7 +151,6 @@ class ZkNode(object):
         self._zk = connection
         self._path = path
         self._track_changes = track_changes
-        self._object_state = {}
         self._cv = threading.Condition()
 
         # Public attributes
@@ -168,13 +167,11 @@ class ZkNode(object):
 
         self._cv.acquire()
         if type == zookeeper.CHANGED_EVENT:
-            data, info = self._zk.get(self._path, self._node_watcher)
-            self._object_state.update(info)
+            data = self._zk.get(self._path, self._node_watcher)[0]
             self.value = _load_value(data)
         elif type == zookeeper.DELETED_EVENT:
             self.deleted = True
             self.value = None
-            self._object_state = {}
         self._cv.release()
 
     def create(self, value=None):
@@ -209,8 +206,7 @@ class ZkNode(object):
     def load(self):
         """Load data from the node, and coerce as necessary"""
         self._cv.acquire()
-        data, info = self._zk.get(self._path, self._node_watcher)
-        self._object_state.update(info)
+        data = self._zk.get(self._path, self._node_watcher)[0]
         self.value = _load_value(data)
         self._cv.release()
 
