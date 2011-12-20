@@ -35,10 +35,8 @@
 # ***** END LICENSE BLOCK *****
 """Zookeeper Configuration
 
-This module provides a :class:`ZkConfig` object which can load itself from
-a Zookeeper path, and serialize itself back. Values that appear to be a
-boolean, int, decimal, or date/datetime will be automatically coerced
-into the appropriate Python objects.
+This module provides a :class:`ZkNode` object which can load itself from
+a Zookeeper path, and serialize itself back.
 
 """
 import datetime
