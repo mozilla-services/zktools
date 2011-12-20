@@ -203,7 +203,7 @@ class ZkNode(object):
         return True
 
     def load(self):
-        """Load our data from the node"""
+        """Load data from the node, and coerce as necessary"""
         self._cv.acquire()
         data, info = self._zk.get(self._path, self._node_watcher)
         self._object_state.update(info)
@@ -216,18 +216,9 @@ class ZkNode(object):
         :param value: The value of the node
         :type value: Any str'able object
 
-        :returns: True if the update was successful, False if the
-                  current value did not match the one being updated
-                  at the time the update was given.
-        :rtype: bool
-
         """
         if self.deleted:
             raise Exception("Can't update this node, it has been "
                             "deleted. You must call create first to "
                             "recreate it.")
-        try:
-            self._zk.set(self._path, _save_value(value),
-                        self._object_state['version'])
-        except zookeeper.BadVersionException:
-            return False
+        self._zk.set(self._path, _save_value(value))
