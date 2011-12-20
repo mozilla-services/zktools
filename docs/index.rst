@@ -12,9 +12,9 @@ Features:
   <zktools.connection.ZkConnection>` object that handles proxying calls to
   zookeeper using the correct zookeeper handle, and re-establishing the
   connection during connection loss in a call.
-* ``Configuration`` - A :class:`Zookeeper Configuration
-  <zktools.configuration.ZkConfig>` object to store and load configuration
-  information stored in Zookeeper nodes.
+* ``Configuration`` - :mod:`Zookeeper Configuration Helpers
+  <zktools.configuration>` to store and load configuration information stored
+  in Zookeeper nodes.
 * ``Locks`` - A :mod:`Zookeeper lock <zktools.locking>` with support for
   non-blocking acquire, modeled on Python's Lock objects that also includes a
   `Revocable Shared Locks with Freaking Laser Beams` described in the 
