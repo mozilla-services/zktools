@@ -118,6 +118,12 @@ class ZkNode(object):
     the ``value`` attribute always reflects the node's value in
     Zookeeper.
 
+    .. warning::
+
+        It's advised to periodically check the ``deleted``
+        attribute if your particular use-case allows for configuration
+        nodes to be deleted.
+
     """
     def __init__(self, connection, path, track_changes=True, load=False):
         """Create a Zookeeper Node
