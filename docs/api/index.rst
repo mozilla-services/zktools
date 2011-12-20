@@ -7,5 +7,6 @@ zktools Modules
 .. toctree::
    :maxdepth: 2
    
+   configuration
    connection
    locking
