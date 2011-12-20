@@ -4,8 +4,8 @@ Changelog
 0.2 (**tip**)
 -------------
 
-Additions
-*********
+Changes
+*******
 
 - Added context manager return to lock to allow use of the 'with'
   statement.

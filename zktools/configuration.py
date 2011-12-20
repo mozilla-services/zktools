@@ -41,8 +41,10 @@ boolean, int, decimal, or date/datetime will be automatically coerced
 into the appropriate Python objects.
 
 """
+import datetime
 import decimal
 import re
+import threading
 
 import zookeeper
 
@@ -50,69 +52,182 @@ ZOO_OPEN_ACL_UNSAFE = {"perms": 0x1f, "scheme": "world", "id": "anyone"}
 
 
 CONVERSIONS = {
-    re.compile(r'^\d\.\d+$'): decimal.Decimal,
+    re.compile(r'^\d+\.\d+$'): decimal.Decimal,
     re.compile(r'^\d+$'): int,
     re.compile(r'^true$', re.IGNORECASE): lambda x: True,
     re.compile(r'^false$', re.IGNORECASE): lambda x: False,
+    re.compile(r'^None$', re.IGNORECASE): lambda x: None,
+    re.compile(r'^\d{4}-\d{2}-\d{2}T\d{2}:\d{2}:\d{2}\.\d+Z$'):
+       lambda x: datetime.datetime.strptime(x, '%Y-%m-%dT%H:%M:%S.%fZ'),
+    re.compile(r'^\d{4}-\d{2}-\d{2} \d{2}:\d{2}:\d{2}\.\d+Z$'):
+       lambda x: datetime.datetime.strptime(x, '%Y-%m-%d %H:%M:%S.%fZ'),
+    re.compile(r'^\d{4}-\d{2}-\d{2}$'):
+       lambda x: datetime.datetime.strptime(x, '%Y-%m-%d'),
 }
 
 
-class ZkConfig(dict):
-    """Zookeeper Configuration object
+def _load_value(value):
+    """Convert a saved value to the best Python match"""
+    for regex, convert in CONVERSIONS.iteritems():
+        if regex.match(value):
+            return convert(value)
+    return value
 
-    This object has the same interface as a normal Python dict, and can
-    be loaded or saved back to Zookeeper.
 
-    A shared read/write lock is used so that multiple computers can read
-    the configuration, but only a single writer is allowed to write it
-    out. This is due to the multiple calls needed to fully read/write
-    the entire config tree.
+def _save_value(value):
+    """Convert a Python object to the best string repr"""
+    # Float is all we care about, as we lose float precision
+    # when calling str on it
+    if isinstance(value, float):
+        return repr(value)
+    elif isinstance(value, datetime.datetime):
+        return value.strftime('%Y-%m-%dT%H:%M:%S.%fZ')
+    elif isinstance(value, datetime.date):
+        return value.strftime('%Y-%m-%d')
+    else:
+        return str(value)
+
+
+class ZkNode(object):
+    """Zookeeper Node
+
+    This object provides access to a single node for updating the
+    value that can also track changes to the value from Zookeeper.
+
+    The value of the node is coerced into an appropriate Python
+    object when loaded, current supported conversions::
+
+        Numbers with decimals      -> Decimal
+        Numbers without decimals   -> Int
+        true/false                 -> Bool
+        none                       -> None
+        ISO 8601 Date and Datetime -> date or datetime
 
     Example::
 
         from zktools.connection import ZkConnection
-        from zktools.configuration import ZkConfig
+        from zktools.configuration import ZkNode
 
         conn = ZkConnection()
-        config = ZkConfig(conn, '/Configurations/MyConfig')
-        config.load()
+        node = ZkNode(conn, '/some/config/node', load=True)
+        print node.value  # prints out the current value
+        node.set(483.24)  # Update the value in zookeeper
 
-        my_info = config['my_host_name']
-        # ... etc ...
+
+    The default behavior is to track changes to the node, so that
+    the ``value`` attribute always reflects the node's value in
+    Zookeeper.
 
     """
-    def __init__(self, connection, config_path, create_intermediary=False):
-        """Create a Zookeeper configuration object
+    def __init__(self, connection, path, track_changes=True, load=False):
+        """Create a Zookeeper Node
+
+        Creating a ZkNode does not touch Zookeeper, the other instance
+        methods should be used to load an existing value if one is
+        expected, or create it.
+
+        In the event the node is deleted once this object is deleted
+        once its being tracked, the ``deleted`` attribute will be
+        ``True``.
 
         :param connection: zookeeper connection object
         :type connection: ZkConnection instance
-        :param config_path: A Zookeeper node path to where the configuration
-                            should be loaded/saved from. Intermediary nodes
-                            will not be created unless ``create_intermediary``
-                            is ``True``.
-        :type config_path: str
+        :param path: Path to the Zookeeper node
+        :type path: str
+        :param track_changes: Whether the node should set a watch
+                              to auto-udpate itself when a change
+                              occurs
+        :type track_changes: bool
+        :param load: Load the value from the node immediately? If set to
+                     True then the :meth:`load` method will be called
+                     immediately
+        :type load: bool
 
         """
-        root_node = config_path[config_path.rfind('/'):]
-        self.zk = connection
-        self.config_path = config_path
+        self._zk = connection
+        self._path = path
+        self._track_changes = track_changes
+        self._object_state = {}
+        self._cv = threading.Condition()
 
-        # This happens if the config_path is not a nested node
-        if root_node != config_path and not connection.exists(root_node):
-            raise Exception("Path to 'config_path' does not exist.")
+        # Public attributes
+        self.value = None
+        self.deleted = False
+
+        if load:
+            self.load()
+
+    def _node_watcher(self, handle, type, state, path):
+        """Watch a node for updates"""
+        if not self._track_changes:
+            return
+
+        self._cv.acquire()
+        if type == zookeeper.CHANGED_EVENT:
+            data, info = self._zk.get(self._path, self._node_watcher)
+            self._object_state.update(info)
+            self.value = _load_value(data)
+        elif type == zookeeper.DELETED_EVENT:
+            self.deleted = True
+            self.value = None
+            self._object_state = {}
+        self._cv.release()
+
+    def create(self, value=None):
+        """Create the node in Zookeeper
+
+        An exception will be tossed if the node can't be created due
+        to the path to it not existing.
+
+        :param value: The value of the node
+        :type value: Any str'able object
+
+        :returns: True if the node was created, False if the
+                  node already exists.
+        :rtype: bool
+
+        """
+        try:
+            self._zk.create(self._path, _save_value(value),
+                           [ZOO_OPEN_ACL_UNSAFE], 0)
+        except zookeeper.NodeExistsException:
+            return False
+        except zookeeper.NoNodeException:
+            raise Exception("Unable to create node: %s, perhaps "
+                            "the path to the node doesn't exist?" %
+                            self._path)
+
+        # Node is created, lets update ourself to ensure we're
+        # still current
+        self.load()
+        return True
 
     def load(self):
-        """Load configuration from zookeeper"""
-        if not self.zk.exists(self.config_path):
-            raise Exception("No existing configuration found at path: %s" %
-                            self.config_path)
+        """Load our data from the node"""
+        self._cv.acquire()
+        data, info = self._zk.get(self._path, self._node_watcher)
+        self._object_state.update(info)
+        self.value = _load_value(data)
+        self._cv.release()
 
-        # First determine if its a sequence (list), or keys (dict)
-        
+    def set(self, value):
+        """Set the value with a new one
 
-    def save(self):
-        self.zk.set(self.config_path, dumps(self))
+        :param value: The value of the node
+        :type value: Any str'able object
 
-    def copy(self):
-        """Return a dict of ourself, not a ZkConfig object"""
-        return dict(self.items())
+        :returns: True if the update was successful, False if the
+                  current value did not match the one being updated
+                  at the time the update was given.
+        :rtype: bool
+
+        """
+        if self.deleted:
+            raise Exception("Can't update this node, it has been "
+                            "deleted. You must call create first to "
+                            "recreate it.")
+        try:
+            self._zk.set(self._path, _save_value(value),
+                        self._object_state['version'])
+        except zookeeper.BadVersionException:
+            return False
