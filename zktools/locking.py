@@ -118,6 +118,15 @@ class _LockBase(object):
             # Ok if this exists already
             pass
 
+    def _revoke_watcher(self, handle, type, state, path):
+        """Watch for lock revokation or deletion"""
+        if type == zookeeper.CHANGED_EVENT:
+            data = self.zk.get(path, self._revoke_watcher)[0]
+            if data == 'unlock':
+                self.locks.revoked.append(True)
+        elif type == zookeeper.DELETED_EVENT:
+            self.locks.revoked.append(True)
+
     def _acquire_lock(self, node_name, timeout=None, revoke=False):
         """Acquire a lock
 
@@ -139,19 +148,15 @@ class _LockBase(object):
         :rtype: bool
 
         """
+        # First clear out any prior revokation warnings
+        self.locks.revoked = []
         revoke_lock = self.locks.revoked
-
-        def revoke_watcher(handle, type, state, path):
-            if type == zookeeper.CHANGED_EVENT:
-                data = self.zk.get(path, revoke_watcher)[0]
-                if data == 'unlock':
-                    revoke_lock.append(True)
 
         # Create a lock node
         znode = self.zk.create(self.locknode + node_name, "0",
                                [ZOO_OPEN_ACL_UNSAFE],
                                zookeeper.EPHEMERAL | zookeeper.SEQUENCE)
-        data = self.zk.get(znode, revoke_watcher)[0]
+        data = self.zk.get(znode, self._revoke_watcher)[0]
         if data == 'unlock':
             revoke_lock.append(True)
         keyname = znode[znode.rfind('/') + 1:]
@@ -186,7 +191,7 @@ class _LockBase(object):
                     self.locknode + node_name, "0", [ZOO_OPEN_ACL_UNSAFE],
                     zookeeper.EPHEMERAL | zookeeper.SEQUENCE)
                 keyname = znode[znode.rfind('/') + 1:]
-                data = self.zk.get(znode, revoke_watcher)[0]
+                data = self.zk.get(znode, self._revoke_watcher)[0]
                 if data == 'unlock':
                     revoke_lock.append(True)
                 continue
