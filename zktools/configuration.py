@@ -41,6 +41,7 @@ a Zookeeper path, and serialize itself back.
 """
 import datetime
 import decimal
+import json
 import re
 import threading
 
@@ -63,16 +64,23 @@ CONVERSIONS = {
        lambda x: datetime.datetime.strptime(x, '%Y-%m-%d'),
 }
 
+JSON_REGEX = re.compile(r'^[\{\[].*[\}\]]$')
 
-def _load_value(value):
+
+def _load_value(value, use_json=False):
     """Convert a saved value to the best Python match"""
     for regex, convert in CONVERSIONS.iteritems():
         if regex.match(value):
             return convert(value)
+    if use_json and JSON_REGEX.match(value):
+        try:
+            return json.loads(value)
+        except ValueError:
+            return value
     return value
 
 
-def _save_value(value):
+def _save_value(value, use_json=False):
     """Convert a Python object to the best string repr"""
     # Float is all we care about, as we lose float precision
     # when calling str on it
@@ -82,6 +90,8 @@ def _save_value(value):
         return value.strftime('%Y-%m-%dT%H:%M:%S.%fZ')
     elif isinstance(value, datetime.date):
         return value.strftime('%Y-%m-%d')
+    elif use_json and isinstance(value, (dict, list)):
+        return json.dumps(value)
     else:
         return str(value)
 
@@ -100,6 +110,17 @@ class ZkNode(object):
         true/false                 -> Bool
         none                       -> None
         ISO 8601 Date and Datetime -> date or datetime
+
+    And optionally, with use_json::
+
+        JSON string                -> dict/list
+
+    .. note::
+
+        The JSON determination is extremely lax, if its a string that
+        starts and ends with brackets or curley marks, its assumed to
+        be a JSON object and will be coerced if possible. If coercion
+        fails, the string will be returned as is.
 
     Example::
 
@@ -123,7 +144,8 @@ class ZkNode(object):
         nodes to be deleted.
 
     """
-    def __init__(self, connection, path, track_changes=True, load=False):
+    def __init__(self, connection, path, track_changes=True, load=False,
+                 use_json=False):
         """Create a Zookeeper Node
 
         Creating a ZkNode does not touch Zookeeper, the other instance
@@ -146,12 +168,16 @@ class ZkNode(object):
                      True then the :meth:`load` method will be called
                      immediately
         :type load: bool
+        :param use_json: Whether values that look like a JSON object should
+                         be deserialized, and dicts/lists saved as JSON.
+        :type use_json: bool
 
         """
         self._zk = connection
         self._path = path
         self._track_changes = track_changes
         self._cv = threading.Condition()
+        self._use_json = use_json
 
         # Public attributes
         self.value = None
@@ -168,7 +194,7 @@ class ZkNode(object):
         self._cv.acquire()
         if type == zookeeper.CHANGED_EVENT:
             data = self._zk.get(self._path, self._node_watcher)[0]
-            self.value = _load_value(data)
+            self.value = _load_value(data, use_json=self._use_json)
         elif type == zookeeper.DELETED_EVENT:
             self.deleted = True
             self.value = None
@@ -189,8 +215,9 @@ class ZkNode(object):
 
         """
         try:
-            self._zk.create(self._path, _save_value(value),
-                           [ZOO_OPEN_ACL_UNSAFE], 0)
+            self._zk.create(self._path,
+                            _save_value(value, use_json=self._use_json),
+                            [ZOO_OPEN_ACL_UNSAFE], 0)
         except zookeeper.NodeExistsException:
             return False
         except zookeeper.NoNodeException:
@@ -207,7 +234,7 @@ class ZkNode(object):
         """Load data from the node, and coerce as necessary"""
         self._cv.acquire()
         data = self._zk.get(self._path, self._node_watcher)[0]
-        self.value = _load_value(data)
+        self.value = _load_value(data, use_json=self._use_json)
         self._cv.release()
 
     def set(self, value):
@@ -221,4 +248,4 @@ class ZkNode(object):
             raise Exception("Can't update this node, it has been "
                             "deleted. You must call create first to "
                             "recreate it.")
-        self._zk.set(self._path, _save_value(value))
+        self._zk.set(self._path, _save_value(value, use_json=self._use_json))
