@@ -117,6 +117,7 @@ class ZkConnection(object):
                     # releases for *every state change*, and we only care
                     # about getting connected
                     self._cv.wait(self._reconnect_timeout - time_taken)
+
                     if self.connected:
                         return
 
@@ -126,7 +127,7 @@ class ZkConnection(object):
                         break
                     time_taken = time.time() - start_time
 
-                if self._handle is None and not self.connected:
+                if self._handle is not None and not self.connected:
                     raise Exception("Timed out waiting for reconnect.")
 
             # Either first run, or a prior session was ditched entirely
