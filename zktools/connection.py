@@ -34,6 +34,7 @@
 #
 # ***** END LICENSE BLOCK *****
 """Zookeeper Connection Classes"""
+import time
 import threading
 
 import zookeeper
@@ -79,73 +80,58 @@ class ZkConnection(object):
         self._reconnect = reconnect
         self._reconnect_timeout = reconnect_timeout
         self._cv = threading.Condition()
-        self._handle = self._session_id = None
-        self._connection_in_progress = False
+        self._handle = None
 
     def _handle_connection(self, handle, typ, state, path):
-        self._cv.acquire()
-        if typ == zookeeper.SESSION_EVENT:
-            if state == zookeeper.CONNECTED_STATE:
-                print "Connected\n"
-                self.connected = True
-                self._session_id = zookeeper.client_id(handle)
-            elif state == zookeeper.CONNECTING_STATE:
-                print "Connecting....\n"
-                self.connected = False
-                self._connection_in_progress = True
-            elif state in (zookeeper.EXPIRED_SESSION_STATE,
-                           zookeeper.AUTH_FAILED_STATE):
-                # Last event for this connection, session is dead,
-                # clean up
-                self.connected = False
-                self._connection_in_progress = False
-        self._cv.notify_all()
-        self._cv.release()
+        # The Zookeeper API runs this in a separate event thread
+        with self._cv:
+            if typ == zookeeper.SESSION_EVENT:
+                if state == zookeeper.CONNECTED_STATE:
+                    print "Connected\n"
+                    self.connected = True
+                elif state == zookeeper.CONNECTING_STATE:
+                    print "Connecting....\n"
+                    self.connected = False
+                elif state in (zookeeper.EXPIRED_SESSION_STATE,
+                               zookeeper.AUTH_FAILED_STATE):
+                    # Last event for this connection, session is dead,
+                    # clean up
+                    self._handle = None
+            self._cv.notify_all()
 
     def connect(self):
         """Connect to zookeeper"""
-        self._cv.acquire()
-
-        # See if the client is already attempting a connection
-        if self._connection_in_progress:
-            self._cv.wait(self._reconnect_timeout)
-            if not self.connected:
-                self._cv.release()
-                raise Exception("Timed out waiting for reconnect.")
-            return
-
-        # See if the connection was already established
-        if self._handle is not None:
-            if zookeeper.state(self._handle) == zookeeper.CONNECTED_STATE:
+        # Run this all with our threading condition
+        with self._cv:
+            # First, check that we didn't just connect
+            if self.connected:
                 return
 
-        # Were we previously established? Try and reconnect to that
-        # session
-        if self._session_id:
-            print "try previous session id"
-            try:
-                self._handle = zookeeper.init(
-                    self._host,
-                    self._handle_connection,
-                    self._session_timeout,
-                    self._session_id
-                )
-                self._cv.wait(self._reconnect_timeout)
-            except (zookeeper.SessionExpiredException,
-                    zookeeper.SessionMovedException):
-                print "failed re-establishing"
-                self._session_id = None
-                self._cv.release()
-                self.connect()
-        else:
+            # See if the client is already attempting a connection
+            if self._handle is not None:
+                start_time = time.time()
+                time_taken = 0
+                while time_taken < self._reconnect_timeout:
+                    # Release and wait until we hit our timeout
+                    # NOTE: We loop here, because the connection handler
+                    # releases for *every state change*, and we only care
+                    # about getting connected
+                    self._cv.wait(self._reconnect_timeout - time_taken)
+                    if self.connected:
+                        break
+                    time_taken = time.time() - start_time
+                if not self.connected:
+                    raise Exception("Timed out waiting for reconnect.")
+                return
+
+            # Either first run, or a prior session was ditched entirely
             self._handle = zookeeper.init(self._host, self._handle_connection,
                                          self._session_timeout)
             self._cv.wait(self._connect_timeout)
-        self._cv.release()
-        if self.connected:
-            print "managed to connect"
-        if not self.connected:
-            raise Exception("Unable to connect to Zookeeper")
+            if self.connected:
+                print "managed to connect"
+            if not self.connected:
+                raise Exception("Unable to connect to Zookeeper")
 
     def __getattr__(self, name):
         """Returns a reconnecting version that also uses the current handle"""
@@ -156,15 +142,22 @@ class ZkConnection(object):
             self.connect()
 
         def call_func(*args, **kwargs):
+            # We wait/try this until we're connected, unless it took
+            # too long
             if not self._reconnect:
                 return zoo_func(self._handle, *args, **kwargs)
-            try:
-                return zoo_func(self._handle, *args, **kwargs)
-            except (zookeeper.ConnectionLossException,
-                    zookeeper.SessionExpiredException,
-                    zookeeper.SessionMovedException):
-                self.connect()
-                return zoo_func(self._handle, *args, **kwargs)
+
+            start_time = time.time()
+            time_taken = 0
+            while time_taken < self._reconnect_timeout:
+                try:
+                    return zoo_func(self._handle, *args, **kwargs)
+                except (zookeeper.ConnectionLossException,
+                        zookeeper.SessionExpiredException,
+                        zookeeper.SessionMovedException):
+                    self.connect()
+                time_taken = time.time() - start_time
+            raise Exception("Unable to reconnect to execute command.")
         call_func.__doc__ = zoo_func.__doc__
 
         # Set this function on ourself so that further calls bypass
