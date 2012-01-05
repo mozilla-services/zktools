@@ -9,7 +9,7 @@ class TestConnection(unittest.TestCase):
 
     def test_connect(self):
         zkc = self.makeOne()
-        zkc.cv = mock.Mock()
+        zkc._cv = mock.Mock()
         mock_zc = mock.Mock()
         mock_init = mock_zc.init
         mock_init.side_effect = async_connect
@@ -22,7 +22,7 @@ class TestConnection(unittest.TestCase):
 
     def test_proxy_command(self):
         zkc = self.makeOne()
-        zkc.cv = mock.Mock()
+        zkc._cv = mock.Mock()
         mock_zc = mock.Mock()
         mock_init = mock_zc.init
         mock_init.side_effect = async_connect
@@ -37,7 +37,7 @@ class TestConnection(unittest.TestCase):
 
     def test_proxy_command_reconnect(self):
         zkc = self.makeOne()
-        zkc.cv = mock.Mock()
+        zkc._cv = mock.Mock()
         mock_zc = mock.Mock()
         mock_init = mock_zc.init
         mock_init.side_effect = async_connect
@@ -68,7 +68,7 @@ class TestConnection(unittest.TestCase):
 
         with mock.patch('zktools.connection.zookeeper', mock_zc):
             zkc = self.makeOne()
-            zkc.cv = mock.Mock()
+            zkc._cv = mock.Mock()
             self.assertEqual(zkc.get('/some/key'), 'works')
 
 
