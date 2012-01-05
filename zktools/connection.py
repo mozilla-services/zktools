@@ -118,18 +118,21 @@ class ZkConnection(object):
                     # about getting connected
                     self._cv.wait(self._reconnect_timeout - time_taken)
                     if self.connected:
+                        return
+
+                    # Triggered, if the session is expired, we break out
+                    # to let logic continue below
+                    if self._handle is None:
                         break
                     time_taken = time.time() - start_time
-                if not self.connected:
+
+                if self._handle is None and not self.connected:
                     raise Exception("Timed out waiting for reconnect.")
-                return
 
             # Either first run, or a prior session was ditched entirely
             self._handle = zookeeper.init(self._host, self._handle_connection,
                                          self._session_timeout)
             self._cv.wait(self._connect_timeout)
-            if self.connected:
-                print "managed to connect"
             if not self.connected:
                 raise Exception("Unable to connect to Zookeeper")
 
