@@ -128,9 +128,9 @@ class ZkNode(object):
         from zktools.configuration import ZkNode
 
         conn = ZkConnection()
-        node = ZkNode(conn, '/some/config/node', load=True)
+        node = ZkNode(conn, '/some/config/node')
 
-        # prints out the current value
+        # prints out the current value, defaults to None
         print node.value
 
         # Set the value in zookeeper
@@ -143,35 +143,29 @@ class ZkNode(object):
 
     .. warning::
 
-        It's advised to periodically check the ``deleted``
-        attribute if your particular use-case allows for configuration
-        nodes to be deleted.
+        **Do not delete nodes that are in use**, there is purposely
+        no code to handle such situations as it creates overly complex
+        scenarios both for ZkNode to handle, and for application code
+        using it to deal with.
 
     """
-    def __init__(self, connection, path, track_changes=True, load=False,
-                 use_json=False):
+    def __init__(self, connection, path, default=None, use_json=False):
         """Create a Zookeeper Node
 
-        Creating a ZkNode does not touch Zookeeper, the other instance
-        methods should be used to load an existing value if one is
-        expected, or create it.
+        Creating a ZkNode by default attempts to load the value, and
+        if its not found will automatically create a blank string as
+        the value.
 
         In the event the node is deleted once this object is deleted
         once its being tracked, the ``deleted`` attribute will be
         ``True``.
 
+
         :param connection: zookeeper connection object
         :type connection: ZkConnection instance
         :param path: Path to the Zookeeper node
         :type path: str
-        :param track_changes: Whether the node should set a watch
-                              to auto-udpate itself when a change
-                              occurs
-        :type track_changes: bool
-        :param load: Load the value from the node immediately? If set to
-                     True then the :meth:`load` method will be called
-                     immediately
-        :type load: bool
+        :param default: A default value if the node is being created
         :param use_json: Whether values that look like a JSON object should
                          be deserialized, and dicts/lists saved as JSON.
         :type use_json: bool
@@ -179,69 +173,43 @@ class ZkNode(object):
         """
         self._zk = connection
         self._path = path
-        self._track_changes = track_changes
         self._cv = threading.Condition()
         self._use_json = use_json
         self._value = None
         self._reload = False
 
-        # Public attributes
-        self.deleted = False
+        with self._cv:
+            if not connection.exists(path, self._created_watcher):
+                self._zk.create(self._path,
+                                _save_value(default, use_json=use_json),
+                                [ZOO_OPEN_ACL_UNSAFE], 0)
 
-        if load:
+                # Wait for the node to actually be created
+                self._cv.wait()
             self._load()
+
+    def _created_watcher(self, handle, type, state, path):
+        """Watch for our node to be created before continuing"""
+        with self._cv:
+            if type == zookeeper.CREATED_EVENT:
+                self._cv.notify_all()
 
     def _node_watcher(self, handle, type, state, path):
         """Watch a node for updates"""
-        if not self._track_changes:
-            return
-
         with self._cv:
             if type == zookeeper.CHANGED_EVENT:
                 data = self._zk.get(self._path, self._node_watcher)[0]
                 self._value = _load_value(data, use_json=self._use_json)
-            elif type == zookeeper.DELETED_EVENT:
-                self.deleted = True
-                self._value = None
             elif type in (zookeeper.EXPIRED_SESSION_STATE,
                           zookeeper.AUTH_FAILED_STATE):
                 self._reload = True
-
-    def create(self, value=None):
-        """Create the node in Zookeeper
-
-        An exception will be tossed if the node can't be created due
-        to the path to it not existing.
-
-        :param value: The value of the node
-        :type value: Any str'able object
-
-        :returns: True if the node was created, False if the
-                  node already exists.
-        :rtype: bool
-
-        """
-        try:
-            self._zk.create(self._path,
-                            _save_value(value, use_json=self._use_json),
-                            [ZOO_OPEN_ACL_UNSAFE], 0)
-        except zookeeper.NodeExistsException:
-            return False
-        except zookeeper.NoNodeException:
-            raise Exception("Unable to create node: %s, perhaps "
-                            "the path to the node doesn't exist?" %
-                            self._path)
-
-        # Node is created, lets update ourself to ensure we're
-        # still current
-        self._load()
-        return True
+            self._cv.notify_all()
 
     def _load(self):
         """Load data from the node, and coerce as necessary"""
         with self._cv:
             data = self._zk.get(self._path, self._node_watcher)[0]
-            self.value = _load_value(data, use_json=self._use_json)
+            self._value = _load_value(data, use_json=self._use_json)
 
     @property
     def value(self):
@@ -251,7 +219,7 @@ class ZkNode(object):
         the value reloaded.
 
         """
-        if self._track_changes and self._reload:
+        if self._reload:
             self._load()
             self._reload = False
         return self._value
@@ -264,8 +232,9 @@ class ZkNode(object):
         :type value: Any str'able object
 
         """
-        if self.deleted:
-            raise Exception("Can't update this node, it has been "
-                            "deleted. You must call create first to "
-                            "recreate it.")
-        self._zk.set(self._path, _save_value(value, use_json=self._use_json))
+        with self._cv:
+            self._zk.set(
+                self._path, _save_value(value, use_json=self._use_json))
+
+            # Now wait to see that it triggered our change event
+            self._cv.wait()

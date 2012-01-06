@@ -1,91 +1,77 @@
-import unittest
-import mock
-
-from nose.tools import raises
-
-import time
 import datetime
+import decimal
+import unittest
+import time
+
+from nose.tools import eq_
 
 
 class TestLocking(unittest.TestCase):
     def makeOne(self, *args, **kwargs):
         from zktools.configuration import ZkNode
-        return ZkNode(*args, **kwargs)
+        from zktools.connection import ZkConnection
+        conn = ZkConnection()
+        return ZkNode(conn, *args, **kwargs)
 
-    def test_load_value_coercion(self):
-        mock_conn = mock.Mock()
-        mock_conn.cv = mock.Mock()
-        mock_zc = mock.Mock()
-        mock_conn.get.return_value = ('124', {})
+    def setUp(self):
+        n = self.makeOne('/zkTestNode')
+        n._zk.delete('/zkTestNode')
 
-        with mock.patch('zktools.connection.zookeeper', mock_zc):
-            node = self.makeOne(mock_conn, '/somenode', load=True)
-            self.assertEqual(node.value, 124)
-            mock_conn.get.return_value = ('a value', {})
-            node.load()
-            self.assertEqual(node.value, 'a value')
+    def testSetDefaultValue(self):
+        n = self.makeOne('/zkTestNode', 234)
+        eq_(n.value, decimal.Decimal('234'))
 
-    def test_save_value_coercion(self):
-        mock_conn = mock.Mock()
-        mock_conn.cv = mock.Mock()
-        mock_zc = mock.Mock()
-        mock_conn.get.return_value = ('124', {})
+    def testUpdateValue(self):
+        n1 = self.makeOne('/zkTestNode')
+        n2 = self.makeOne('/zkTestNode')
 
-        with mock.patch('zktools.connection.zookeeper', mock_zc):
-            node = self.makeOne(mock_conn, '/somenode')
-            val = time.time()
-            node.create(val)
-            ccal = mock_conn.method_calls[0]
-            self.assertEqual(ccal[0], 'create')
-            self.assertEqual(ccal[1][1], repr(val))
-            d = datetime.datetime.utcnow()
-            node.create(d)
-            ccal = mock_conn.method_calls[-2]
-            self.assertEqual(ccal[1][1], d.strftime('%Y-%m-%dT%H:%M:%S.%fZ'))
-            d = datetime.date.today()
-            node.create(d)
-            ccal = mock_conn.method_calls[-2]
-            self.assertEqual(ccal[1][1], d.strftime('%Y-%m-%d'))
-            node.create('fred')
-            ccal = mock_conn.method_calls[-2]
-            self.assertEqual(ccal[1][1], 'fred')
+        eq_(n1.value, n2.value)
 
-    def test_set_exception(self):
-        mock_conn = mock.Mock()
-        mock_conn.cv = mock.Mock()
-        node = self.makeOne(mock_conn, '/somenode')
-        node.deleted = True
+        n1.value = 942
 
-        @raises(Exception)
-        def testit():
-            node.set('hi')
-        testit()
+        # It can take a fraction of a second on some machines on occasion
+        # for the other value to update
+        time.sleep(0.1)
+        eq_(n1.value, n2.value)
 
-    def test_set(self):
-        mock_conn = mock.Mock()
-        mock_conn.cv = mock.Mock()
-        mock_zc = mock.Mock()
-        mock_conn.get.return_value = ('124', {})
+    def testJsonValue(self):
+        n1 = self.makeOne('/zkTestNode', use_json=True)
+        n1.value = dict(alpha=203)
+        eq_(n1.value['alpha'], 203)
+        n2 = self.makeOne('/zkTestNode', use_json=True)
+        eq_(n2.value, n1.value)
 
-        with mock.patch('zktools.connection.zookeeper', mock_zc):
-            node = self.makeOne(mock_conn, '/somenode')
-            node.set('fred')
-            ccal = mock_conn.method_calls[0]
-            self.assertEqual(ccal[1][1], 'fred')
+    def testBadJson(self):
+        n1 = self.makeOne('/zkTestNode', use_json=True)
+        n1.value = '{[sasdfasdfsd}'
+        n2 = self.makeOne('/zkTestNode', use_json=True)
+        eq_(n2.value, n1.value)
 
+    def testNormalString(self):
+        n1 = self.makeOne('/zkTestNode', use_json=True)
+        n1.value = 'fred'
+        n2 = self.makeOne('/zkTestNode', use_json=True)
+        eq_(n2.value, n1.value)
 
-def sequence(*args):
-    orig_values = args
-    values = list(reversed(args))
+    def testFloat(self):
+        n1 = self.makeOne('/zkTestNode', use_json=True)
+        n1.value = 492.23
+        n2 = self.makeOne('/zkTestNode', use_json=True)
+        eq_(n2.value, n1.value)
 
-    def return_value(*args):  # pragma: nocover
-        try:
-            val = values.pop()
-            if isinstance(val, Exception):
-                raise val
-            else:
-                return val
-        except IndexError:
-            print orig_values
-            raise
-    return return_value
+    def testDates(self):
+        n1 = self.makeOne('/zkTestNode', use_json=True)
+        n1.value = datetime.datetime.today()
+        n2 = self.makeOne('/zkTestNode', use_json=True)
+        eq_(n2.value, n1.value)
+
+        n1 = self.makeOne('/zkTestNode', use_json=True)
+        n1.value = datetime.date.today()
+        n2 = self.makeOne('/zkTestNode', use_json=True)
+        eq_(n2.value, n1.value)
+
+    def testReload(self):
+        n1 = self.makeOne('/zkTestNode', use_json=True)
+        n1.value = now = datetime.datetime.today()
+        n1._reload = True
+        eq_(n1.value, now)
