@@ -43,8 +43,7 @@ import zookeeper
 class ZkConnection(object):
     """Zookeeper Connection object"""
     def __init__(self, host="localhost:2181", connect_timeout=10,
-                 session_timeout=10 * 1000, reconnect=True,
-                 reconnect_timeout=10 * 1000):
+                 session_timeout=10 * 1000, reconnect_timeout=10 * 1000):
         """Create a connection object, capable of automatically
         reconnecting when the connection is lost.
 
@@ -74,11 +73,9 @@ class ZkConnection(object):
         :type connect_timeout: int
         :param session_timeout: Timeout for the zookeeper session
         :type session_timeout: int
-        :param reconnect: Whether the connection should automatically
-                          be re-established when it goes down.
-        :type reconnect: bool
         :param reconnect_timeout: How many seconds to attempt to
-                                  reconnect before giving up.
+                                  reconnect before giving up. Set to 0
+                                  to avoid reconnect attempts.
         :type reconnect_timeout: int
 
         """
@@ -86,7 +83,6 @@ class ZkConnection(object):
         self._host = host
         self._connect_timeout = connect_timeout
         self._session_timeout = session_timeout
-        self._reconnect = reconnect
         self._reconnect_timeout = reconnect_timeout
         self._cv = threading.Condition()
         self._handle = None
@@ -117,14 +113,9 @@ class ZkConnection(object):
 
             # See if the client is already attempting a connection
             if self._handle is not None:
-                if not self._reconnect:
-                    # We were told not to wait for a reconnect
-                    raise Exception("Not connected, and reconnect was "
-                                    "disabled.")
-
                 start_time = time.time()
                 time_taken = 0
-                while time_taken < self._reconnect_timeout:
+                while time_taken <= self._reconnect_timeout:
                     # Release and wait until we hit our timeout
                     # NOTE: We loop here, because the connection handler
                     # releases for *every state change*, and we only care
@@ -155,18 +146,15 @@ class ZkConnection(object):
         zoo_func = getattr(zookeeper, name)
 
         # Check that we're still connected
-        if not self.connected and self._reconnect:
+        if not self.connected:
             self.connect()
 
         def call_func(*args, **kwargs):
             # We wait/try this until we're connected, unless it took
             # too long
-            if not self._reconnect:
-                return zoo_func(self._handle, *args, **kwargs)
-
             start_time = time.time()
             time_taken = 0
-            while time_taken < self._reconnect_timeout:
+            while time_taken <= self._reconnect_timeout:
                 try:
                     return zoo_func(self._handle, *args, **kwargs)
                 except (zookeeper.ConnectionLossException,
