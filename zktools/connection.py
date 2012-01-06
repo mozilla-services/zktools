@@ -45,14 +45,20 @@ class ZkConnection(object):
     def __init__(self, host="localhost:2181", connect_timeout=10,
                  session_timeout=10 * 1000, reconnect=True,
                  reconnect_timeout=10 * 1000):
-        """Create a connection object
+        """Create a connection object, capable of automatically
+        reconnecting when the connection is lost.
+
+        In the event the connection is lost, the zookeeper command
+        will block until the connection is available again, or the
+        ``reconnect_timeout`` is reached. The latter will raise an
+        Exception about the reconnect period expiring.
 
         Example::
 
-            zk = ZkConnection()
-            zk.connect()
+            conn = ZkConnection()
+            conn.connect()
 
-            node = zk.create(
+            node = conn.create(
                 "/my/node", "a value",
                 [{"perms": 0x1f, "scheme": "world", "id": "anyone"}],
                 0)
@@ -71,6 +77,9 @@ class ZkConnection(object):
         :param reconnect: Whether the connection should automatically
                           be re-established when it goes down.
         :type reconnect: bool
+        :param reconnect_timeout: How many seconds to attempt to
+                                  reconnect before giving up.
+        :type reconnect_timeout: int
 
         """
         self.connected = False
@@ -100,7 +109,7 @@ class ZkConnection(object):
 
     def connect(self):
         """Connect to zookeeper"""
-        # Run this all with our threading condition
+        # Run this with our threading Condition
         with self._cv:
             # First, check that we didn't just connect
             if self.connected:
@@ -108,6 +117,11 @@ class ZkConnection(object):
 
             # See if the client is already attempting a connection
             if self._handle is not None:
+                if not self._reconnect:
+                    # We were told not to wait for a reconnect
+                    raise Exception("Not connected, and reconnect was "
+                                    "disabled.")
+
                 start_time = time.time()
                 time_taken = 0
                 while time_taken < self._reconnect_timeout:
