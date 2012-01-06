@@ -129,8 +129,12 @@ class ZkNode(object):
 
         conn = ZkConnection()
         node = ZkNode(conn, '/some/config/node', load=True)
-        print node.value  # prints out the current value
-        node.set(483.24)  # Update the value in zookeeper
+
+        # prints out the current value
+        print node.value
+
+        # Set the value in zookeeper
+        node.value = 483.24
 
 
     The default behavior is to track changes to the node, so that
@@ -178,27 +182,30 @@ class ZkNode(object):
         self._track_changes = track_changes
         self._cv = threading.Condition()
         self._use_json = use_json
+        self._value = None
+        self._reload = False
 
         # Public attributes
-        self.value = None
         self.deleted = False
 
         if load:
-            self.load()
+            self._load()
 
     def _node_watcher(self, handle, type, state, path):
         """Watch a node for updates"""
         if not self._track_changes:
             return
 
-        self._cv.acquire()
-        if type == zookeeper.CHANGED_EVENT:
-            data = self._zk.get(self._path, self._node_watcher)[0]
-            self.value = _load_value(data, use_json=self._use_json)
-        elif type == zookeeper.DELETED_EVENT:
-            self.deleted = True
-            self.value = None
-        self._cv.release()
+        with self._cv:
+            if type == zookeeper.CHANGED_EVENT:
+                data = self._zk.get(self._path, self._node_watcher)[0]
+                self._value = _load_value(data, use_json=self._use_json)
+            elif type == zookeeper.DELETED_EVENT:
+                self.deleted = True
+                self._value = None
+            elif type in (zookeeper.EXPIRED_SESSION_STATE,
+                          zookeeper.AUTH_FAILED_STATE):
+                self._reload = True
 
     def create(self, value=None):
         """Create the node in Zookeeper
@@ -227,17 +234,30 @@ class ZkNode(object):
 
         # Node is created, lets update ourself to ensure we're
         # still current
-        self.load()
+        self._load()
         return True
 
-    def load(self):
+    def _load(self):
         """Load data from the node, and coerce as necessary"""
-        self._cv.acquire()
-        data = self._zk.get(self._path, self._node_watcher)[0]
-        self.value = _load_value(data, use_json=self._use_json)
-        self._cv.release()
+        with self._cv:
+            data = self._zk.get(self._path, self._node_watcher)[0]
+            self.value = _load_value(data, use_json=self._use_json)
 
-    def set(self, value):
+    @property
+    def value(self):
+        """Returns the current value
+
+        If the Zookeeper session expired, it will be reconnected and
+        the value reloaded.
+
+        """
+        if self._track_changes and self._reload:
+            self._load()
+            self._reload = False
+        return self._value
+
+    @value.setter
+    def value(self, value):
         """Set the value with a new one
 
         :param value: The value of the node
