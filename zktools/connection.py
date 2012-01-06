@@ -87,16 +87,15 @@ class ZkConnection(object):
         with self._cv:
             if typ == zookeeper.SESSION_EVENT:
                 if state == zookeeper.CONNECTED_STATE:
-                    print "Connected\n"
                     self.connected = True
                 elif state == zookeeper.CONNECTING_STATE:
-                    print "Connecting....\n"
                     self.connected = False
                 elif state in (zookeeper.EXPIRED_SESSION_STATE,
                                zookeeper.AUTH_FAILED_STATE):
                     # Last event for this connection, session is dead,
                     # clean up
                     self._handle = None
+                    self.connected = False
             self._cv.notify_all()
 
     def connect(self):
