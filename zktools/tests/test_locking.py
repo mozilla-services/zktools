@@ -78,11 +78,12 @@ class TestSharedLocks(TestLocking):
         from zktools.locking import IMMEDIATE
         w1 = self.makeReadLock('zkLockTest')
         r1 = self.makeWriteLock('zkLockTest')
-
+        ev = threading.Event()
         vals = []
 
         def reader():
             with r1.acquire():
+                ev.set()
                 vals.append(1)
                 while not r1.revoked():
                     random_val = 2 + 3
@@ -94,6 +95,7 @@ class TestSharedLocks(TestLocking):
         reader = threading.Thread(target=reader)
         writer = threading.Thread(target=writer)
         reader.start()
+        ev.wait()
         eq_(vals, [1])
         writer.start()
         reader.join()
@@ -103,11 +105,12 @@ class TestSharedLocks(TestLocking):
     def testGentleRevoke(self):
         w1 = self.makeReadLock('zkLockTest')
         r1 = self.makeWriteLock('zkLockTest')
-
+        ev = threading.Event()
         vals = []
 
         def reader():
             with r1.acquire():
+                ev.set()
                 vals.append(1)
                 while not r1.revoked():
                     random_val = 2 + 3
@@ -119,6 +122,7 @@ class TestSharedLocks(TestLocking):
         reader = threading.Thread(target=reader)
         writer = threading.Thread(target=writer)
         reader.start()
+        ev.wait()
         eq_(vals, [1])
         writer.start()
         reader.join()
@@ -130,9 +134,11 @@ class TestSharedLocks(TestLocking):
         r1 = self.makeWriteLock('zkLockTest')
 
         vals = []
+        ev = threading.Event()
 
         def reader():
             with r1.acquire():
+                ev.set()
                 vals.append(1)
                 while not r1.revoked():
                     random_val = 2 + 3
@@ -147,6 +153,7 @@ class TestSharedLocks(TestLocking):
         reader = threading.Thread(target=reader)
         writer = threading.Thread(target=writer)
         reader.start()
+        ev.wait()
         eq_(vals, [1])
         writer.start()
         reader.join()
@@ -158,15 +165,18 @@ class TestSharedLocks(TestLocking):
         r1 = self.makeWriteLock('zkLockTest')
 
         vals = []
+        ev = threading.Event()
 
         def reader():
             with r1.acquire():
+                ev.set()
                 vals.append(1)
                 while not r1.revoked():
                     random_val = 2 + 3
 
         reader = threading.Thread(target=reader)
         reader.start()
+        ev.wait()
         eq_(vals, [1])
         eq_(w1.connected, True)
         w1.clear()
