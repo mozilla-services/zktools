@@ -37,17 +37,18 @@
 
 This module provides a :class:`ZkLock`, which should look familiar to anyone
 that has used Python's ``threading.Lock`` class. In addition to normal locking
-behavior, revokable shared read/write locks with are also supported. Both the
-:class:`ZkLock` and :class:`SharedZkLock` can be revoked as desired. This
-requires the current lock holder(s) to release their lock(s).
+behavior, revokable shared read/write locks with are also supported. All of the
+locks can be revoked as desired. This requires the current lock holder(s) to
+release their lock(s).
 
 Shared Read/Write Locks
 =======================
 
 Also known in the Zookeeper Recipes as ``Revocable Shared Locks with Freaking
-Laser Beams``, :class:`SharedZkLock`'s support read and write locks. A read
-lock can be acquired as long as no write locks are active, while a write-lock
-can only be acquired when there are no other read or write locks active.
+Laser Beams``, :class:`ZkReadLock` and :class:`ZkWriteLock` locks have been
+implemented. A read lock can be acquired as long as no write locks are active,
+while a write-lock can only be acquired when there are no other read or write
+locks active.
 
 """
 import logging
@@ -96,7 +97,6 @@ class _LockBase(object):
         self._lock_root = lock_root
         self._locks = threading.local()
         self._locks.revoked = []
-        self._locks.removed = []
         self._log_debug = logging.DEBUG >= log.getEffectiveLevel()
         if logfile:
             zookeeper.set_log_stream(open(logfile))
@@ -119,7 +119,8 @@ class _LockBase(object):
 
         # Try and create our locking node
         try:
-            self._zk.create(self._locknode, "lock", [ZOO_OPEN_ACL_UNSAFE], 0)
+            self._zk.create(self._locknode, "lock", [ZOO_OPEN_ACL_UNSAFE],
+                            0)
         except zookeeper.NodeExistsException:
             # Ok if this exists already
             pass
@@ -138,7 +139,7 @@ class _LockBase(object):
                        True to request and wait for prior locks to release
                        their lock, or :obj:`IMMEDIATE` to destroy the blocking
                        read/write locks and attempt to acquire a write lock.
-        :type revoke: bool or :obj:``
+        :type revoke: bool or :obj:``IMMEDIATE``
 
 
         :returns: True if the lock was acquired, False otherwise
@@ -149,7 +150,6 @@ class _LockBase(object):
         self._locks.revoked = []
         self._locks.removed = []
         revoke_lock = self._locks.revoked
-        removed_lock = self._locks.removed
 
         # Create a lock node
         znode = self._zk.create(self._locknode + node_name, "0",
@@ -165,15 +165,10 @@ class _LockBase(object):
                 data = self._zk.get(path, revoke_watcher)[0]
                 if data == 'unlock':
                     revoke_lock.append(True)
-            elif type == zookeeper.DELETED_EVENT:
+            elif type == zookeeper.DELETED_EVENT or \
+                 state == zookeeper.EXPIRED_SESSION_STATE:
                 # Trigger if node was deleted
-                removed_lock.append(True)
-            elif state == zookeeper.CONNECTED_STATE:
-                # First, we need to make sure our locking node still
-                # exists
-                if type == zookeeper.EXPIRED_SESSION_STATE:
-                    # Our session expired, we know we lost it
-                    removed_lock.append(True)
+                revoke_lock.append(True)
 
         data = self._zk.get(znode, revoke_watcher)[0]
         if data == 'unlock':
@@ -273,11 +268,6 @@ class _LockBase(object):
         :rtype: bool
         """
         return bool(self._locks.revoked)
-
-    def removed(self):
-        """Indicate if the lock was deleted or removed due to a
-        session timeout"""
-        return bool(self._locks.removed)
 
     def has_lock(self):
         """Check with Zookeeper to see if the lock is acquired

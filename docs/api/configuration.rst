@@ -7,4 +7,4 @@ Module Contents
 ---------------
 
 .. autoclass:: ZkNode
-    :members: __init__, create, load, set
+    :members: __init__

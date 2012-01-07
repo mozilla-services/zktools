@@ -1,320 +1,174 @@
-import unittest
-import mock
+import threading
+
+from nose.tools import eq_
+
+from zktools.tests import TestBase
 
 
-class TestLocking(unittest.TestCase):
+class TestLocking(TestBase):
     def makeOne(self, *args, **kwargs):
         from zktools.locking import ZkLock
-        return ZkLock(*args, **kwargs)
+        return ZkLock(self.conn, *args, **kwargs)
 
-    def test_lock_success(self):
-        mock_conn = mock.Mock()
-        mock_conn.cv = mock.Mock()
-        mock_zc = mock.Mock()
-        mock_conn.create.side_effect = sequence(
-            '/ZktoolsLocks',
-            '/ZktoolsLocks/lock',
-            '/ZktoolsLocks/lock/lock0001'
-        )
-        mock_conn.get_children.return_value = ['lock0001']
-        mock_conn.get.return_value = (None, None)
+    def setUp(self):
+        if self.conn.exists('/ZktoolsLocks/zkLockTest'):
+            self.conn.delete('/ZktoolsLocks/zkLockTest')
 
-        lock = self.makeOne(mock_conn, 'lock')
-        with mock.patch('zktools.connection.zookeeper', mock_zc):
-            result = lock.acquire()
-            self.assertEqual(bool(result), True)
-            result = lock.release()
-            self.assertEqual(bool(result), True)
+    def testBasicLock(self):
+        lock = self.makeOne('zkLockTest')
+        lock.clear()
+        eq_(bool(lock.acquire()), True)
+        eq_(lock.release(), True)
 
-    def test_lock_disconnect_issue(self):
-        mock_conn = mock.Mock()
-        mock_conn.cv = mock.Mock()
-        mock_zc = mock.Mock()
-        mock_conn.create.side_effect = sequence(
-            '/ZktoolsLocks',
-            '/ZktoolsLocks/lock',
-            '/ZktoolsLocks/lock/lock0001',
-            '/ZktoolsLocks/lock/lock0002'
-        )
-        mock_conn.get_children.side_effect = sequence(
-            [], ['lock0002']
-        )
-        mock_conn.get.return_value = (None, None)
+    def testLockRelease(self):
+        lock1 = self.makeOne('zkLockTest')
+        lock2 = self.makeOne('zkLockTest')
 
-        lock = self.makeOne(mock_conn, 'lock')
-        with mock.patch('zktools.connection.zookeeper', mock_zc):
-            result = lock.acquire()
-            self.assertEqual(bool(result), True)
-            result = lock.release()
-            self.assertEqual(bool(result), True)
+        vals = []
 
-    def test_lock_has_lock(self):
-        mock_conn = mock.Mock()
-        mock_conn.cv = mock.Mock()
-        mock_zc = mock.Mock()
-        mock_conn.create.side_effect = sequence(
-            '/ZktoolsLocks',
-            '/ZktoolsLocks/lock',
-            '/ZktoolsLocks/lock/lock0001',
-            '/ZktoolsLocks/lock/lock0002'
-        )
-        mock_conn.get_children.side_effect = sequence(
-            ['lock0001'], ['lock0001']
-        )
-        mock_conn.get.return_value = (None, None)
-
-        lock = self.makeOne(mock_conn, 'lock')
-        with mock.patch('zktools.connection.zookeeper', mock_zc):
-            self.assertEqual(bool(lock.acquire()), True)
-            self.assertEqual(bool(lock.has_lock()), True)
-            self.assertEqual(bool(lock.release()), True)
-
-    def test_lock_wait(self):
-        mock_conn = mock.Mock()
-        mock_conn.cv = mock.Mock()
-        mock_zc = mock.Mock()
-        mock_conn.create.side_effect = sequence(
-            '/ZktoolsLocks',
-            '/ZktoolsLocks/lock',
-            '/ZktoolsLocks/lock/lock0002'
-        )
-        mock_conn.get_children.side_effect = sequence(
-            ['lock0001', 'lock0002'], ['lock0002']
-        )
-        mock_conn.get.return_value = (None, None)
-
-        lock = self.makeOne(mock_conn, 'lock')
-
-        def release_wait(prior_node, func):
-            func(0, 0, 0, 0)
-
-        mock_conn.exists.side_effect = release_wait
-
-        with mock.patch('zktools.connection.zookeeper', mock_zc):
-            self.assertEqual(bool(lock.acquire()), True)
-            self.assertEqual(bool(lock.release()), True)
-            self.assertEqual(len(mock_conn.method_calls), 8)
-
-    def test_no_blocking(self):
-        mock_conn = mock.Mock()
-        mock_conn.cv = mock.Mock()
-        mock_zc = mock.Mock()
-        mock_conn.create.side_effect = sequence(
-            '/ZktoolsLocks',
-            '/ZktoolsLocks/lock',
-            '/ZktoolsLocks/lock/lock0002'
-        )
-        mock_conn.get_children.side_effect = sequence(
-            ['lock0001', 'lock0002'],
-        )
-        mock_conn.get.return_value = (None, None)
-
-        lock = self.makeOne(mock_conn, 'lock')
-
-        with mock.patch('zktools.connection.zookeeper', mock_zc):
-            self.assertEqual(lock.acquire(timeout=0), False)
-            self.assertEqual(len(mock_conn.method_calls), 7)
-
-    def test_lock_revoked_upon_acquiring(self):
-        """Test that we handle it if we acquired the lock, but then
-        the node was deleted"""
-        mock_conn = mock.Mock()
-        mock_conn.cv = mock.Mock()
-        mock_zc = mock.Mock()
-        mock_conn.create.side_effect = sequence(
-            '/ZktoolsLocks',
-            '/ZktoolsLocks/lock',
-            '/ZktoolsLocks/lock/lock0001',
-            '/ZktoolsLocks/lock/lock0002'
-        )
-        mock_conn.get_children.side_effect = sequence(
-            ['lock0001'], ['lock0002']
-        )
-        mock_conn.get.return_value = (None, None)
-
-        # We can't fake the zookeeper exception apparently
-        import zookeeper
-        mock_conn.set.side_effect = sequence(
-            zookeeper.NoNodeException(),
-            None
-        )
-
-        lock = self.makeOne(mock_conn, 'lock')
-
-        with mock.patch('zktools.connection.zookeeper', mock_zc):
-            self.assertEqual(bool(lock.acquire()), True)
-            self.assertEqual(len(mock_conn.method_calls), 5)
+        def run():
+            with lock2.acquire():
+                vals.append(2)
+        waiter = threading.Thread(target=run)
+        lock1.acquire()
+        waiter.start()
+        eq_(vals, [])
+        lock1.release()
+        waiter.join()
+        eq_(vals, [2])
 
 
-class TestSharedLock(unittest.TestCase):
-    def makeOne(self, *args, **kwargs):
-        from zktools.locking import SharedZkLock
-        return SharedZkLock(*args, **kwargs)
+class TestSharedLocks(TestLocking):
+    def makeWriteLock(self, *args, **kwargs):
+        from zktools.locking import ZkWriteLock
+        return ZkWriteLock(self.conn, *args, **kwargs)
 
-    def test_read_lock_success(self):
-        mock_conn = mock.Mock()
-        mock_conn.cv = mock.Mock()
-        mock_zc = mock.Mock()
-        mock_conn.create.side_effect = sequence(
-            '/ZktoolsLocks',
-            '/ZktoolsLocks/lock',
-            '/ZktoolsLocks/lock/read-lock0001'
-        )
-        mock_conn.get_children.return_value = ['read-lock0001']
-        mock_conn.get.return_value = (None, None)
+    def makeReadLock(self, *args, **kwargs):
+        from zktools.locking import ZkReadLock
+        return ZkReadLock(self.conn, *args, **kwargs)
 
-        lock = self.makeOne(mock_conn, 'lock')
-        with mock.patch('zktools.connection.zookeeper', mock_zc):
-            self.assertEqual(bool(lock.acquire_read_lock()), True)
-            self.assertEqual(lock.release(), True)
+    def testLockQueue(self):
+        r1 = self.makeReadLock('zkLockTest')
+        r2 = self.makeReadLock('zkLockTest')
+        w1 = self.makeWriteLock('zkLockTest')
 
-    def test_write_lock_success(self):
-        mock_conn = mock.Mock()
-        mock_conn.cv = mock.Mock()
-        mock_zc = mock.Mock()
-        mock_conn.create.side_effect = sequence(
-            '/ZktoolsLocks',
-            '/ZktoolsLocks/lock',
-            '/ZktoolsLocks/lock/write-lock0001'
-        )
-        mock_conn.get_children.return_value = ['write-lock0001']
-        mock_conn.get.return_value = (None, None)
+        vals = []
 
-        lock = self.makeOne(mock_conn, 'lock')
-        with mock.patch('zktools.connection.zookeeper', mock_zc):
-            self.assertEqual(bool(lock.acquire_write_lock()), True)
-            self.assertEqual(lock.release(), True)
+        def reader():
+            with r2.acquire():
+                vals.append('r')
 
-    def test_read_lock_failure_noblocking(self):
-        mock_conn = mock.Mock()
-        mock_conn.cv = mock.Mock()
-        mock_zc = mock.Mock()
-        mock_conn.create.side_effect = sequence(
-            '/ZktoolsLocks',
-            '/ZktoolsLocks/lock',
-            '/ZktoolsLocks/lock/read-lock0002'
-        )
-        mock_conn.get_children.return_value = [
-            'write-lock0001', 'read-lock0002'
-        ]
-        mock_conn.get.return_value = (None, None)
+        def writer():
+            with w1.acquire():
+                vals.append('w')
 
-        lock = self.makeOne(mock_conn, 'lock')
-        with mock.patch('zktools.connection.zookeeper', mock_zc):
-            self.assertEqual(lock.acquire_read_lock(timeout=0), False)
+        read2 = threading.Thread(target=reader)
+        write1 = threading.Thread(target=writer)
+        r1.acquire()
+        eq_(r1.has_lock(), True)
+        read2.start()
+        write1.start()
+        read2.join()
+        eq_(vals, ['r'])
+        r1.release()
+        write1.join()
+        eq_(vals, ['r', 'w'])
 
-    def test_write_lock_revoke_success(self):
-        mock_conn = mock.Mock()
-        mock_conn.cv = mock.Mock()
-        mock_zc = mock.Mock()
-        mock_conn.create.side_effect = sequence(
-            '/ZktoolsLocks',
-            '/ZktoolsLocks/lock',
-            '/ZktoolsLocks/lock/write-lock0003'
-        )
-        mock_conn.get_children.side_effect = sequence(
-            ['read-lock0001', 'read-lock0002', 'write-lock0003'],
-            ['write-lock0003'],
-        )
-        mock_conn.get.return_value = (None, None)
+    def testRevoked(self):
         from zktools.locking import IMMEDIATE
+        w1 = self.makeReadLock('zkLockTest')
+        r1 = self.makeWriteLock('zkLockTest')
 
-        lock = self.makeOne(mock_conn, 'lock')
-        with mock.patch('zktools.connection.zookeeper', mock_zc):
-            self.assertEqual(bool(lock.acquire_write_lock(revoke=IMMEDIATE)), True)
-            self.assertEqual(lock.release(), True)
-            self.assertEqual(len(mock_conn.method_calls), 9)
+        vals = []
 
-    def test_write_lock_revoke_success_waiting(self):
-        mock_conn = mock.Mock()
-        mock_conn.cv = mock.Mock()
-        mock_zc = mock.Mock()
-        mock_conn.create.side_effect = sequence(
-            '/ZktoolsLocks',
-            '/ZktoolsLocks/lock',
-            '/ZktoolsLocks/lock/write-lock0003'
-        )
-        mock_conn.get_children.side_effect = sequence(
-            ['read-lock0001', 'read-lock0002', 'write-lock0003'],
-            ['write-lock0003'],
-        )
-        mock_conn.get.return_value = (None, None)
-        mock_conn.exists.return_value = False
+        def reader():
+            with r1.acquire():
+                vals.append(1)
+                while not r1.revoked():
+                    random_val = 2 + 3
 
-        lock = self.makeOne(mock_conn, 'lock')
-        with mock.patch('zktools.connection.zookeeper', mock_zc):
-            self.assertEqual(bool(lock.acquire_write_lock(revoke=True)), True)
-            self.assertEqual(lock.release(), True)
-            self.assertEqual(len(mock_conn.method_calls), 10)
+        def writer():
+            with w1.acquire(revoke=IMMEDIATE):
+                vals.append(2)
 
-    def test_write_lock_failure_noblocking(self):
-        mock_conn = mock.Mock()
-        mock_conn.cv = mock.Mock()
-        mock_zc = mock.Mock()
-        mock_conn.create.side_effect = sequence(
-            '/ZktoolsLocks',
-            '/ZktoolsLocks/lock',
-            '/ZktoolsLocks/lock/write-lock0002',
-        )
-        mock_conn.get_children.return_value = [
-            'read-lock0001', 'write-lock0002'
-        ]
-        mock_conn.get.return_value = (None, None)
+        reader = threading.Thread(target=reader)
+        writer = threading.Thread(target=writer)
+        reader.start()
+        eq_(vals, [1])
+        writer.start()
+        reader.join()
+        writer.join()
+        eq_(vals, [1, 2])
 
-        lock = self.makeOne(mock_conn, 'lock')
-        with mock.patch('zktools.connection.zookeeper', mock_zc):
-            self.assertEqual(lock.acquire_write_lock(timeout=0), False)
+    def testGentleRevoke(self):
+        w1 = self.makeReadLock('zkLockTest')
+        r1 = self.makeWriteLock('zkLockTest')
 
-    def test_lock_disconnect_issue(self):
-        mock_conn = mock.Mock()
-        mock_conn.cv = mock.Mock()
-        mock_zc = mock.Mock()
-        mock_conn.create.side_effect = sequence(
-            '/ZktoolsLocks',
-            '/ZktoolsLocks/lock',
-            '/ZktoolsLocks/lock/read-lock0001',
-            '/ZktoolsLocks/lock/read-lock0002'
-        )
-        mock_conn.get_children.side_effect = sequence(
-            [], ['read-lock0002']
-        )
-        mock_conn.get.return_value = (None, None)
+        vals = []
 
-        lock = self.makeOne(mock_conn, 'lock')
-        with mock.patch('zktools.connection.zookeeper', mock_zc):
-            self.assertEqual(bool(lock.acquire_read_lock()), True)
+        def reader():
+            with r1.acquire():
+                vals.append(1)
+                while not r1.revoked():
+                    random_val = 2 + 3
 
-    def test_clear_lock(self):
-        mock_conn = mock.Mock()
-        mock_conn.cv = mock.Mock()
-        mock_zc = mock.Mock()
-        mock_conn.create.side_effect = sequence(
-            '/ZktoolsLocks',
-            '/ZktoolsLocks/lock',
-            '/ZktoolsLocks/lock/write-lock0002',
-        )
-        mock_conn.get_children.return_value = [
-            'read-lock0001', 'write-lock0002'
-        ]
+        def writer():
+            with w1.acquire(revoke=True):
+                vals.append(2)
 
-        lock = self.makeOne(mock_conn, 'lock')
-        with mock.patch('zktools.connection.zookeeper', mock_zc):
-            lock.clear()
-            self.assertEqual(len(mock_conn.method_calls), 5)
+        reader = threading.Thread(target=reader)
+        writer = threading.Thread(target=writer)
+        reader.start()
+        eq_(vals, [1])
+        writer.start()
+        reader.join()
+        writer.join()
+        eq_(vals, [1, 2])
 
+    def testTimeOut(self):
+        w1 = self.makeReadLock('zkLockTest')
+        r1 = self.makeWriteLock('zkLockTest')
 
-def sequence(*args):
-    orig_values = args
-    values = list(reversed(args))
+        vals = []
 
-    def return_value(*args):  # pragma: nocover
-        try:
-            val = values.pop()
-            if isinstance(val, Exception):
-                raise val
-            else:
-                return val
-        except IndexError:
-            print orig_values
-            raise
-    return return_value
+        def reader():
+            with r1.acquire():
+                vals.append(1)
+                while not r1.revoked():
+                    random_val = 2 + 3
+
+        def writer():
+            result = w1.acquire(timeout=0)
+            if result: vals.append(2)
+            vals.append(3)
+            with w1.acquire(revoke=True):
+                vals.append(4)
+
+        reader = threading.Thread(target=reader)
+        writer = threading.Thread(target=writer)
+        reader.start()
+        eq_(vals, [1])
+        writer.start()
+        reader.join()
+        writer.join()
+        eq_(vals, [1, 3, 4])
+
+    def testClearing(self):
+        w1 = self.makeReadLock('zkLockTest')
+        r1 = self.makeWriteLock('zkLockTest')
+
+        vals = []
+
+        def reader():
+            with r1.acquire():
+                vals.append(1)
+                while not r1.revoked():
+                    random_val = 2 + 3
+
+        reader = threading.Thread(target=reader)
+        reader.start()
+        eq_(vals, [1])
+        eq_(w1.connected, True)
+        w1.clear()
+        reader.join()
+        eq_(vals, [1])

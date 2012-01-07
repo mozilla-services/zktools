@@ -1,28 +1,23 @@
-import unittest
-
 from nose.tools import eq_
 
+from zktools.tests import TestBase
 
-class TestConnection(unittest.TestCase):
-    def makeOne(self, *args, **kwargs):
-        from zktools.connection import ZkConnection
-        return ZkConnection(*args, **kwargs)
 
+class TestConnection(TestBase):
     def tearDown(self):
         try:
-            conn = self.makeOne()
-            conn.delete('/zktoolsTest')
+            self.conn.delete('/zktoolsTest')
+            self.conn.close()
         except:  # nocover
             pass
 
     def test_connect(self):
-        zkc = self.makeOne()
-        zkc.connect()
-        eq_(zkc.connected, True)
+        self.conn.connect()
+        eq_(self.conn.connected, True)
 
     def test_create_nodes(self):
         from zktools.configuration import ZOO_OPEN_ACL_UNSAFE
-        conn = self.makeOne()
+        conn = self.conn
         conn.connect()
         conn.create('/zktoolsTest', '01', [ZOO_OPEN_ACL_UNSAFE], 0)
         val, _ = conn.get('/zktoolsTest')

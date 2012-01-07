@@ -161,6 +161,13 @@ class ZkConnection(object):
                         zookeeper.SessionExpiredException,
                         zookeeper.SessionMovedException):
                     self.connect()
+                except zookeeper.ZooKeeperException, msg:
+                    if 'zhandle already freed' in msg:
+                        self._handle = None
+                        self.connected = False
+                        self.connect()
+                    else:
+                        raise
                 time_taken = time.time() - start_time
             raise Exception("Unable to reconnect to execute command.")
         call_func.__doc__ = zoo_func.__doc__

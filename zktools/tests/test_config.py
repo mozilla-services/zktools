@@ -1,17 +1,17 @@
 import datetime
 import decimal
-import unittest
 import time
 
 from nose.tools import eq_
 
 
-class TestLocking(unittest.TestCase):
+from zktools.tests import TestBase
+
+
+class TestConfig(TestBase):
     def makeOne(self, *args, **kwargs):
         from zktools.configuration import ZkNode
-        from zktools.connection import ZkConnection
-        conn = ZkConnection()
-        return ZkNode(conn, *args, **kwargs)
+        return ZkNode(self.conn, *args, **kwargs)
 
     def setUp(self):
         n = self.makeOne('/zkTestNode')
