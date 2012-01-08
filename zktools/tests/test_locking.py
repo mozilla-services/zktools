@@ -85,8 +85,9 @@ class TestSharedLocks(TestLocking):
             with r1.acquire():
                 ev.set()
                 vals.append(1)
+                val = 0
                 while not r1.revoked():
-                    random_val = 2 + 3
+                    val += 1
 
         def writer():
             with w1.acquire(revoke=IMMEDIATE):
@@ -112,8 +113,9 @@ class TestSharedLocks(TestLocking):
             with r1.acquire():
                 ev.set()
                 vals.append(1)
+                val = 0
                 while not r1.revoked():
-                    random_val = 2 + 3
+                    val += 1
 
         def writer():
             with w1.acquire(revoke=True):
@@ -140,12 +142,14 @@ class TestSharedLocks(TestLocking):
             with r1.acquire():
                 ev.set()
                 vals.append(1)
+                val = 0
                 while not r1.revoked():
-                    random_val = 2 + 3
+                    val += 1
 
         def writer():
             result = w1.acquire(timeout=0)
-            if result: vals.append(2)
+            if result:  # pragma: nocover
+                vals.append(2)
             vals.append(3)
             with w1.acquire(revoke=True):
                 vals.append(4)
@@ -171,8 +175,9 @@ class TestSharedLocks(TestLocking):
             with r1.acquire():
                 ev.set()
                 vals.append(1)
+                val = 0
                 while not r1.revoked():
-                    random_val = 2 + 3
+                    val += 1
 
         reader = threading.Thread(target=reader)
         reader.start()
