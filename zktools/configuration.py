@@ -33,7 +33,7 @@
 # the terms of any one of the MPL, the GPL or the LGPL.
 #
 # ***** END LICENSE BLOCK *****
-"""Zookeeper Configuration
+"""Zookeeper Nodes
 
 This module provides a :class:`ZkNode` object which can load itself from
 a Zookeeper path, and serialize itself back.
