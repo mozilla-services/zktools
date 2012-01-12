@@ -10,7 +10,7 @@ from zktools.tests import TestBase
 
 class TestConfig(TestBase):
     def makeOne(self, *args, **kwargs):
-        from zktools.configuration import ZkNode
+        from zktools.node import ZkNode
         return ZkNode(self.conn, *args, **kwargs)
 
     def setUp(self):

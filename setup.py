@@ -13,6 +13,7 @@ on_rtd = os.environ.get('READTHEDOCS', None) == 'True'
 if not on_rtd:
     reqs.extend([
         "zkpython>=0.4",
+        "blinker>=1.2",
     ])
 
 setup(name='zktools',

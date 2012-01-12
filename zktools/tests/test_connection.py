@@ -16,7 +16,7 @@ class TestConnection(TestBase):
         eq_(self.conn.connected, True)
 
     def test_create_nodes(self):
-        from zktools.configuration import ZOO_OPEN_ACL_UNSAFE
+        from zktools.node import ZOO_OPEN_ACL_UNSAFE
         conn = self.conn
         conn.connect()
         conn.create('/zktoolsTest', '01', [ZOO_OPEN_ACL_UNSAFE], 0)
