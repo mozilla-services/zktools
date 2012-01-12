@@ -9,4 +9,4 @@ Node Class
 ----------
 
 .. autoclass:: ZkNode
-    :members: __init__
+    :members: __init__, value, connected

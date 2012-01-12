@@ -237,3 +237,8 @@ class ZkNode(object):
 
             # Now wait to see that it triggered our change event
             self._cv.wait()
+
+    @property
+    def connected(self):
+        """Indicate whether a connection to Zookeeper exists"""
+        return self._zk.connected
