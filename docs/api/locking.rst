@@ -1,22 +1,27 @@
-:mod:`zktools.locking` -- Zookeeper Locking Classes
-===================================================
+.. _locking_module:
+
+:mod:`zktools.locking`
+======================
 
 .. automodule:: zktools.locking
 
 
-Module Contents
----------------
+Constants
+---------
 
 .. data:: IMMEDIATE
     
     Flag used to declare that revokation should occur immediately. Other
     lock-holders will not be given time to release their lock.
 
-.. autoclass:: _LockBase
-    :members: __init__, _acquire_lock, release, revoked, has_lock, clear
+Lock Class
+----------
 
 .. autoclass:: ZkLock
     :members: __init__, acquire, release, revoked, has_lock, clear
+
+Shared Read/Write Lock Classes
+------------------------------
 
 .. autoclass:: ZkReadLock
 	:members: __init__, acquire, revoked, has_lock, release, clear
@@ -24,8 +29,14 @@ Module Contents
 .. autoclass:: ZkWriteLock
     :members: __init__, acquire, revoked, has_lock, release, clear
 
+Private Lock Base Class
+-----------------------
+
+.. autoclass:: _LockBase
+    :members: __init__, _acquire_lock, release, revoked, has_lock, clear
+
 Internal Utility Functions
-~~~~~~~~~~~~~~~~~~~~~~~~~~
+--------------------------
 
 .. autofunction:: has_read_lock
 .. autofunction:: has_write_lock

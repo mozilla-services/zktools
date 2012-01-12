@@ -1,10 +1,12 @@
-:mod:`zktools.node` -- Zookeeper Node
-=====================================
+.. _node_module:
+
+:mod:`zktools.node`
+===================
 
 .. automodule:: zktools.node
 
-Module Contents
----------------
+Node Class
+----------
 
 .. autoclass:: ZkNode
     :members: __init__

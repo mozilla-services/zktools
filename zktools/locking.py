@@ -41,8 +41,7 @@ behavior, revokable shared read/write locks with are also supported. All of the
 locks can be revoked as desired. This requires the current lock holder(s) to
 release their lock(s).
 
-Shared Read/Write Locks
-=======================
+**Shared Read/Write Locks**
 
 Also known in the Zookeeper Recipes as ``Revocable Shared Locks with Freaking
 Laser Beams``, :class:`ZkReadLock` and :class:`ZkWriteLock` locks have been
