@@ -37,6 +37,34 @@ class TestLocking(TestBase):
         waiter.join()
         eq_(vals, [2])
 
+    def testLockRevoked(self):
+        lock1 = self.makeOne('zkLockTest')
+        lock2 = self.makeOne('zkLockTest')
+
+        vals = []
+        ev = threading.Event()
+
+        def run():
+            with lock2.acquire():
+                vals.append(2)
+                ev.set()
+                val = 0
+                while not lock2.revoked:
+                    val += 1
+                ev.set()
+
+        waiter = threading.Thread(target=run)
+        waiter.start()
+        ev.wait()
+        eq_(vals, [2])
+        ev.clear()
+        lock1.revoke_all()
+        ev.wait()
+        waiter.join()
+        with lock1.acquire():
+            vals.append(3)
+        eq_(vals, [2, 3])
+
 
 class TestSharedLocks(TestLocking):
     def makeWriteLock(self, *args, **kwargs):
@@ -86,7 +114,7 @@ class TestSharedLocks(TestLocking):
                 ev.set()
                 vals.append(1)
                 val = 0
-                while not r1.revoked():
+                while not r1.revoked:
                     val += 1
 
         def writer():
@@ -114,7 +142,7 @@ class TestSharedLocks(TestLocking):
                 ev.set()
                 vals.append(1)
                 val = 0
-                while not r1.revoked():
+                while not r1.revoked:
                     val += 1
 
         def writer():
@@ -143,7 +171,7 @@ class TestSharedLocks(TestLocking):
                 ev.set()
                 vals.append(1)
                 val = 0
-                while not r1.revoked():
+                while not r1.revoked:
                     val += 1
 
         def writer():
@@ -176,7 +204,7 @@ class TestSharedLocks(TestLocking):
                 ev.set()
                 vals.append(1)
                 val = 0
-                while not r1.revoked():
+                while not r1.revoked:
                     val += 1
 
         reader = threading.Thread(target=reader)

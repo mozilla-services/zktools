@@ -18,16 +18,16 @@ Lock Class
 ----------
 
 .. autoclass:: ZkLock
-    :members: __init__, acquire, release, revoked, has_lock, clear
+    :members: __init__, acquire, release, revoked, revoke_all, has_lock, clear
 
 Shared Read/Write Lock Classes
 ------------------------------
 
 .. autoclass:: ZkReadLock
-	:members: __init__, acquire, revoked, has_lock, release, clear
+	:members: __init__, acquire, revoked, has_lock, revoke_all, release, clear
 
 .. autoclass:: ZkWriteLock
-    :members: __init__, acquire, revoked, has_lock, release, clear
+    :members: __init__, acquire, revoked, has_lock, revoke_all, release, clear
 
 Private Lock Base Class
 -----------------------

@@ -143,10 +143,9 @@ class ZkNode(object):
 
     .. warning::
 
-        **Do not delete nodes that are in use**, there is purposely
-        no code to handle such situations as it creates overly complex
-        scenarios both for ZkNode to handle, and for application code
-        using it to deal with.
+        **Do not delete nodes that are in use**, there intentionally is
+        no code to handle such conditions as it creates overly complex
+        scenarios both for ZkNode and for application code using it.
 
     """
     def __init__(self, connection, path, default=None, use_json=False):

@@ -260,14 +260,6 @@ class _LockBase(object):
         except (zookeeper.NoNodeException, AttributeError):
             return False
 
-    def revoked(self):
-        """Indicate if this shared lock has been revoked
-
-        :returns: True if the lock has been revoked, False otherwise.
-        :rtype: bool
-        """
-        return bool(self._locks.revoked)
-
     def has_lock(self):
         """Check with Zookeeper to see if the lock is acquired
 
@@ -296,7 +288,7 @@ class _LockBase(object):
         .. warning::
 
             You must be sure this is a dead lock, as clearing it will
-            forcably release it.
+            forcably release it by deleting all lock nodes.
 
         :returns: True if the lock was cleared, or False if it
                   is no longer valid.
@@ -309,6 +301,38 @@ class _LockBase(object):
                 self._zk.delete(self._locknode + '/' + child)
             except zookeeper.NoNodeException:
                 pass
+
+    def revoke_all(self):
+        """Revoke any existing locks, gently
+
+        Unlike :meth:`clear`, this asks all existing locks to
+        release, rather than forcibly revoking them.
+
+        :returns: True if existing locks were present, False if
+                  there were no existing locks.
+        :rtype: bool
+
+        """
+        # Get all the children of the node
+        children = self._zk.get_children(self._locknode)
+        if not children:
+            return False
+
+        for child in children:
+            try:
+                self._zk.set(self._locknode + '/' + child, "unlock")
+            except zookeeper.NoNodeException:
+                pass
+        return True
+
+    @property
+    def revoked(self):
+        """Indicate if this shared lock has been revoked
+
+        :returns: True if the lock has been revoked, False otherwise.
+        :rtype: bool
+        """
+        return bool(self._locks.revoked)
 
     @property
     def connected(self):

@@ -20,6 +20,7 @@ Backward Incompatibilities
 
 - SharedZkLock has been refactored into ZkWriteLock and ZkReadLock.
 - ``reconnect`` is no longer an option to ZkConnection.
+- ``revoked`` is a property of Locks, not a method.
 
 
 0.1 (11/22/2011)
