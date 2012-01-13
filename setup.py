@@ -13,7 +13,7 @@ on_rtd = os.environ.get('READTHEDOCS', None) == 'True'
 if not on_rtd:
     reqs.extend([
         "zkpython>=0.4",
-        "blinker>=1.2",
+        "clint>=0.3.0",
     ])
 
 setup(name='zktools',
@@ -36,5 +36,8 @@ setup(name='zktools',
       tests_require=['pkginfo', 'Mock>=0.7', 'nose'],
       install_requires=reqs,
       entry_points="""
+      [console_scripts]
+      zooky = zktools.locking:lock_cli
+
       """
 )

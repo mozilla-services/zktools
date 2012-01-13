@@ -43,7 +43,8 @@ import zookeeper
 class ZkConnection(object):
     """Zookeeper Connection object"""
     def __init__(self, host="localhost:2181", connect_timeout=10,
-                 session_timeout=10 * 1000, reconnect_timeout=10 * 1000):
+                 session_timeout=10 * 1000, reconnect_timeout=10 * 1000,
+                 debug=False):
         """Create a connection object, capable of automatically
         reconnecting when the connection is lost.
 
@@ -86,6 +87,8 @@ class ZkConnection(object):
         self._reconnect_timeout = reconnect_timeout
         self._cv = threading.Condition()
         self._handle = None
+        if not debug:
+            zookeeper.set_log_stream(open("/dev/null"))
 
     def _handle_connection(self, handle, typ, state, path):
         # The Zookeeper API runs this in a separate event thread

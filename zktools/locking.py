@@ -53,8 +53,15 @@ locks active.
 import logging
 import threading
 import time
+from optparse import OptionParser
 
+from clint.textui import colored
+from clint.textui import columns
+from clint.textui import indent
+from clint.textui import puts
 import zookeeper
+
+from zktools.connection import ZkConnection
 
 
 ZOO_OPEN_ACL_UNSAFE = {"perms": 0x1f, "scheme": "world", "id": "anyone"}
@@ -476,3 +483,67 @@ def has_write_lock(keyname, children):
     if keyname == children[0]:
         return True, None
     return False, children[:children.index(keyname)]
+
+
+def lock_cli():
+    """Zktools Lock CLI"""
+    usage = "usage: %prog COMMAND"
+    parser = OptionParser(usage=usage)
+    parser.add_option("--host", dest="host", type="str",
+                      default='localhost:2181',
+                      help="Zookeeper host string")
+    parser.add_option("--lock_root", dest="lock_root", type="str",
+                      default="/ZktoolsLocks", help="Lock root node")
+    (options, args) = parser.parse_args()
+
+    if len(args) < 1:
+        puts(colored.red("Specify a command: list, remove, or show"))
+        return
+    command = args[0]
+    if command not in ['list', 'remove', 'show']:
+        puts(colored.red("Unrecognized command. Valid commands: list, remove, "
+                        "show"))
+        return
+
+    conn = ZkConnection(options.host)
+    if command == 'list':
+        children = conn.get_children(options.lock_root)
+
+        col1, col2 = 30, 70
+        puts(columns([colored.cyan("LOCK"), col1],
+                     [colored.cyan("STATUS"), col2]))
+        for child in children:
+            try:
+                locks = conn.get_children(options.lock_root + '/' + child)
+            except zookeeper.NoNodeException:
+                continue
+            if locks:
+                status = colored.red("Locked")
+            else:
+                status = colored.green("Free")
+            puts(columns([child, col1], [status, col2]))
+    elif command == 'remove':
+        if len(args) < 2:
+            puts(colored.red("You ust specify a node to remove."))
+            return
+        conn.delete(options.lock_root + '/' + args[1])
+    elif command == 'show':
+        if len(args) < 2:
+            puts(colored.red("You ust specify a node to show."))
+            return
+        children = conn.get_children(options.lock_root + '/' + args[1])
+
+        col1, col2, col3 = 20, 15, None
+        puts(columns([colored.cyan("LOCK HOLDER"), col1],
+                     [colored.cyan("DATA"), col2],
+                     [colored.cyan("INFO"), col3]))
+        for child in children:
+            try:
+                node_name = '%s/%s/%s' % (options.lock_root, args[1],
+                                          child)
+                value, info = conn.get(node_name)
+            except zookeeper.NoNodeException:
+                continue
+            info['created_ago'] = int(time.time() - (info['ctime']/1000))
+            info['modifed_ago'] = int(time.time() - (info['mtime']/1000))
+            puts(columns([child, col1], [value, col2], [str(info), col3]))
