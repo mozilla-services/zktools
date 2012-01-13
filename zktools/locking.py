@@ -49,6 +49,29 @@ implemented. A read lock can be acquired as long as no write locks are active,
 while a write-lock can only be acquired when there are no other read or write
 locks active.
 
+**Using the Lock Command Line Interface**
+
+`zktools` comes with a CLI to easily see current locks, details of each
+lock, and remove empty locks called `zooky`.
+
+Usage:
+
+.. code-block:: bash
+
+    $ zooky list
+    LOCK                           STATUS
+    fred                           Locked
+    zkLockTest                     Free
+
+    $ zooky show fred
+    LOCK HOLDER          DATA            INFO
+    write-0000000002     0               {'pzxid': 152321L, 'ctime': 1326417195365L, 'aversion': 0, 'mzxid': 152321L, 'numChildren': 0,
+                                         'ephemeralOwner': 86927055090548768L, 'version': 0, 'dataLength': 1, 'mtime': 1326417195365L,
+                                         'cversion': 0, 'modifed_ago': 16, 'created_ago': 16, 'czxid': 152321L}
+
+The `modifed_ago` and `created_ago` fields in INFO show how many seconds
+ago the lock was created and modified.
+
 """
 import logging
 import threading
