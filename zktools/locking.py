@@ -560,13 +560,13 @@ def lock_cli():
         puts(columns([colored.cyan("LOCK HOLDER"), col1],
                      [colored.cyan("DATA"), col2],
                      [colored.cyan("INFO"), col3]))
-        for child in children:
+        for child in sorted(children):
             try:
                 node_name = '%s/%s/%s' % (options.lock_root, args[1],
                                           child)
                 value, info = conn.get(node_name)
             except zookeeper.NoNodeException:
                 continue
-            info['created_ago'] = int(time.time() - (info['ctime']/1000))
-            info['modifed_ago'] = int(time.time() - (info['mtime']/1000))
+            info['created_ago'] = int(time.time() - (info['ctime'] / 1000))
+            info['modifed_ago'] = int(time.time() - (info['mtime'] / 1000))
             puts(columns([child, col1], [value, col2], [str(info), col3]))
