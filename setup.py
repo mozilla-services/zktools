@@ -8,12 +8,11 @@ here = os.path.abspath(os.path.dirname(__file__))
 README = open(os.path.join(here, 'README.rst')).read()
 CHANGES = open(os.path.join(here, 'CHANGES.rst')).read()
 
-reqs = []
+reqs = ["clint>=0.3.0"]
 on_rtd = os.environ.get('READTHEDOCS', None) == 'True'
 if not on_rtd:
     reqs.extend([
         "zkpython>=0.4",
-        "clint>=0.3.0",
     ])
 
 setup(name='zktools',
