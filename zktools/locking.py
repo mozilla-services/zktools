@@ -80,7 +80,6 @@ from optparse import OptionParser
 
 from clint.textui import colored
 from clint.textui import columns
-from clint.textui import indent
 from clint.textui import puts
 import zookeeper
 
