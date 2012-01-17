@@ -1,14 +1,19 @@
-__version__ = '0.1'
+__version__ = '0.2'
 
 import os
 
 from setuptools import setup, find_packages
 
 here = os.path.abspath(os.path.dirname(__file__))
-README = open(os.path.join(here, 'README.rst')).read()
-CHANGES = open(os.path.join(here, 'CHANGES.rst')).read()
+with open(os.path.join(here, 'README.rst')) as f:
+    README = f.read()
+with open(os.path.join(here, 'CHANGES.rst')) as f:
+    CHANGES = f.read()
 
-reqs = ["clint>=0.3.0"]
+reqs = [
+    "clint>=0.3.0",
+]
+
 on_rtd = os.environ.get('READTHEDOCS', None) == 'True'
 if not on_rtd:
     reqs.extend([
@@ -23,7 +28,7 @@ setup(name='zktools',
         "Intended Audience :: Developers",
         "Programming Language :: Python",
         ],
-      keywords='zookeeper lock leader',
+      keywords='zookeeper lock leader configuration',
       author="Ben Bangert",
       author_email="bbangert@mozilla.com",
       url="http://zktools.readthedocs.org/",
