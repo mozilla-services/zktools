@@ -148,7 +148,8 @@ class ZkNode(object):
         scenarios both for ZkNode and for application code using it.
 
     """
-    def __init__(self, connection, path, default=None, use_json=False):
+    def __init__(self, connection, path, default=None, use_json=False,
+                 permission=ZOO_OPEN_ACL_UNSAFE):
         """Create a Zookeeper Node
 
         Creating a ZkNode by default attempts to load the value, and
@@ -168,6 +169,9 @@ class ZkNode(object):
         :param use_json: Whether values that look like a JSON object should
                          be deserialized, and dicts/lists saved as JSON.
         :type use_json: bool
+        :param permission: Node permission to use if the node is being
+                           created.
+        :type permission: dict
 
         """
         self._zk = connection
@@ -181,7 +185,7 @@ class ZkNode(object):
             if not connection.exists(path, self._created_watcher):
                 self._zk.create(self._path,
                                 _save_value(default, use_json=use_json),
-                                [ZOO_OPEN_ACL_UNSAFE], 0)
+                                [permission], 0)
 
                 # Wait for the node to actually be created
                 self._cv.wait()
