@@ -81,6 +81,7 @@ class ZkConnection(object):
 
         """
         self.connected = False
+        self._establish_connection = False
         self._host = host
         self._connect_timeout = connect_timeout
         self._session_timeout = session_timeout
@@ -109,6 +110,7 @@ class ZkConnection(object):
     def connect(self):
         """Connect to zookeeper"""
         # Run this with our threading Condition
+        self._establish_connection = True
         with self._cv:
             # First, check that we didn't just connect
             if self.connected:
@@ -148,13 +150,16 @@ class ZkConnection(object):
         """Returns a reconnecting version that also uses the current handle"""
         zoo_func = getattr(zookeeper, name)
 
-        # Check that we're still connected
-        if not self.connected:
-            self.connect()
-
         def call_func(*args, **kwargs):
             # We wait/try this until we're connected, unless it took
             # too long
+            if name == 'close':
+                self._establish_connection = False
+
+            # Check that we're still connected
+            if not self.connected and self._establish_connection:
+                self.connect()
+
             start_time = time.time()
             time_taken = 0
             while time_taken <= self._reconnect_timeout:
@@ -163,6 +168,8 @@ class ZkConnection(object):
                 except (zookeeper.ConnectionLossException,
                         zookeeper.SessionExpiredException,
                         zookeeper.SessionMovedException):
+                    if not self._establish_connection:
+                        raise
                     self.connect()
                 except zookeeper.ZooKeeperException, msg:
                     if 'zhandle already freed' in msg:

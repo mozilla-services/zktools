@@ -11,5 +11,7 @@ class TestBase(unittest.TestCase):
     def conn(self):
         from zktools.connection import ZkConnection
         if not connection:
-            connection.append(ZkConnection())
+            conn = ZkConnection()
+            conn.connect()
+            connection.append(conn)
         return connection[0]
