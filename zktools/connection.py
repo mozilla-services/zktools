@@ -155,6 +155,8 @@ class ZkConnection(object):
             # too long
             if name == 'close':
                 self._establish_connection = False
+                self.handle = None
+                self.connected = False
 
             # Check that we're still connected
             if not self.connected and self._establish_connection:
