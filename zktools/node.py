@@ -229,9 +229,30 @@ class ZkNode(object):
                 self._path, self._children_watcher)
 
     def add_children_subscriber(self, func):
+        """Add a subscriber function for children event changes
+
+        :param func: Function to register
+        :type func: function
+
+        The subscriber function will be called and passed two
+        parameters, the node, and a list of the children before the
+        event was triggered. A list of the current children can be
+        found on :obj:`ZkNode.children`.
+
+        """
         self.children_change.connect(func)
 
     def add_data_subscriber(self, func):
+        """Add a subscriber function for data value changes
+
+        :param func: Function to register
+        :type func: function
+
+        The subscriber function will be called and passed two
+        parameters, the node, and the prior value of the node. The
+        current value can be found on :obj:`ZkNode.value`.
+
+        """
         self.data_change.connect(func)
 
     @property

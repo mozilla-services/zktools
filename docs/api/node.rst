@@ -9,7 +9,7 @@ Node Class
 ----------
 
 .. autoclass:: ZkNode
-    :members: __init__, children, value, connected
+    :members: __init__, add_children_subscriber, add_data_subscriber, children, value, connected
 
 .. autoclass:: ZkNodeDict
     :members: __init__
