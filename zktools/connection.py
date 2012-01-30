@@ -154,9 +154,12 @@ class ZkConnection(object):
             # We wait/try this until we're connected, unless it took
             # too long
             if name == 'close':
-                self._establish_connection = False
-                self.handle = None
-                self.connected = False
+                try:
+                    return zoo_func(self._handle, *args, **kwargs)
+                finally:
+                    self._establish_connection = False
+                    self._handle = None
+                    self.connected = False
 
             # Check that we're still connected
             if not self.connected and self._establish_connection:
@@ -174,7 +177,8 @@ class ZkConnection(object):
                         raise
                     self.connect()
                 except zookeeper.ZooKeeperException, msg:
-                    if 'zhandle already freed' in msg:
+                    if 'zhandle already freed' in msg and \
+                       self._establish_connection:
                         self._handle = None
                         self.connected = False
                         self.connect()
