@@ -13,7 +13,8 @@ Changes
 Features
 ********
 
-- Configuration object to load/store configuration data in Zookeeper.
+- Node object to retrieve ZNode data from Zookeeper and keep it up
+  to date.
 
 Backward Incompatibilities
 **************************

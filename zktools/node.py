@@ -12,6 +12,7 @@ import decimal
 import json
 import re
 import threading
+import UserDict
 
 import blinker
 import zookeeper
@@ -136,10 +137,6 @@ class ZkNode(object):
         scenarios both for ZkNode and for application code using it.
 
     """
-    # Signals
-    children_change = blinker.Signal()
-    data_change = blinker.Signal()
-
     def __init__(self, connection, path, default=None, use_json=False,
                  permission=ZOO_OPEN_ACL_UNSAFE):
         """Create a Zookeeper Node
@@ -172,6 +169,9 @@ class ZkNode(object):
         self._value = None
         self._reload_data = self._reload_children = False
         self._children = []
+        # Signals
+        self.children_change = blinker.Signal()
+        self.data_change = blinker.Signal()
 
         with self._cv:
             if not connection.exists(path, self._created_watcher):
@@ -229,10 +229,10 @@ class ZkNode(object):
                 self._path, self._children_watcher)
 
     def add_children_subscriber(self, func):
-        self.children_change.connect(func, sender=self)
+        self.children_change.connect(func)
 
     def add_data_subscriber(self, func):
-        self.data_change.connect(func, sender=self)
+        self.data_change.connect(func)
 
     @property
     def value(self):
@@ -279,3 +279,104 @@ class ZkNode(object):
     def connected(self):
         """Indicate whether a connection to Zookeeper exists"""
         return self._zk.connected
+
+
+class ZkNodeDict(UserDict.DictMixin):
+    """Zookeeper Node Dict
+
+    This object loads a shallow node tree from Zookeeper and
+    represents it as a dict. Each dict name/value represents
+    a node under the parent path, and updates in Zookeeper to
+    remove/add nodes or change values are immediately represented
+    in the ``ZkNodeDict`` object.
+
+    Example::
+
+        from zktools.connection import ZkConnection
+        from zktools.configuration import ZkNode
+
+        conn = ZkConnection()
+        nodedict = ZkNodeDict(conn, '/some/config/nodetree')
+
+
+    """
+    def __init__(self, connection, path, permission=ZOO_OPEN_ACL_UNSAFE):
+        """Create a ZkNodeDict object
+
+        :param connection: zookeeper connection object
+        :type connection: ZkConnection instance
+        :param path: Path to the Zookeeper node
+        :type path: str
+        :param permission: Node permission to use if the node is being
+                           created.
+        :type permission: dict
+
+        """
+        self._zk = connection
+        self._path = path
+        self._node_dict = {}
+        self._cv = threading.Condition()
+        self._permission = permission
+
+        # Update children nodes
+
+        # Do our initial load of the main node
+        self._node = node = ZkNode(self._zk, self._path)
+
+        # We lock here to ensure the child_watcher isn't called
+        # till we're done with the initial load
+        with self._cv:
+            node.add_children_subscriber(self._child_watcher)
+            for name in node.children:
+                self._node_dict[name] = ZkNode(self._zk,
+                    '%s/%s' % (self._path, name),
+                    permission=self._permission)
+
+    def _child_watcher(self, sender, prior_children):
+        """Watches the node for child updates"""
+        with self._cv:
+            old_set = set(prior_children)
+            new_set = set(sender.children)
+            for name in new_set - old_set:
+                if name in self._node_dict:
+                    continue
+                self._node_dict[name] = ZkNode(self._zk,
+                    '%s/%s' % (self._path, name),
+                    permission=self._permission)
+            for name in old_set - new_set:
+                del self._node_dict[name]
+            self._cv.notify_all()
+
+    def keys(self):
+        """Return the current node keys"""
+        return self._node_dict.keys()
+
+    def __getitem__(self, name):
+        """Retrieve the value from the underlying node"""
+        if name not in self._node_dict:
+            raise KeyError
+        else:
+            return self._node_dict[name].value
+
+    def __setitem__(self, name, value):
+        """Set an item in the node tree"""
+        if not isinstance(name, str):
+            raise Exception("Key names must be strings.")
+        with self._cv:
+            if name in self._node_dict:
+                self._node_dict[name].value = value
+            else:
+                self._node_dict[name] = ZkNode(self._zk,
+                    '%s/%s' % (self._path, name), default=value,
+                    permission=self._permission)
+
+    def __delitem__(self, name):
+        """Delete an item in Zookeeper, and wait for the
+        delete notification to remove it from the ZkNodeDict"""
+        with self._cv:
+            if name not in self._node_dict:
+                raise KeyError
+            else:
+                self._zk.delete('%s/%s' % (self._path, name))
+                # Wait for the delete to trigger
+                self._cv.wait()
