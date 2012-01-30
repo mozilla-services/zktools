@@ -97,7 +97,7 @@ class ZkNode(object):
     Example::
 
         from zktools.connection import ZkConnection
-        from zktools.configuration import ZkNode
+        from zktools.node import ZkNode
 
         conn = ZkConnection()
         node = ZkNode(conn, '/some/config/node')
@@ -288,15 +288,27 @@ class ZkNodeDict(UserDict.DictMixin):
     represents it as a dict. Each dict name/value represents
     a node under the parent path, and updates in Zookeeper to
     remove/add nodes or change values are immediately represented
-    in the ``ZkNodeDict`` object.
+    in the :class:`ZkNodeDict` object.
+
+    The full range of Python dict operations are available with
+    the :class:`ZkNodeDict`.
 
     Example::
 
         from zktools.connection import ZkConnection
-        from zktools.configuration import ZkNode
+        from zktools.node import ZkNode
 
         conn = ZkConnection()
         nodedict = ZkNodeDict(conn, '/some/config/nodetree')
+
+        # see the keys
+        print nodedict.keys()
+
+        # set a value
+        nodedict['my_key'] = 23
+
+        # delete a value
+        del nodedict['my_key']
 
 
     """
