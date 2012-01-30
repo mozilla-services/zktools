@@ -10,10 +10,11 @@ class TestBase(unittest.TestCase):
     @property
     def conn(self):
         from zktools.connection import ZkConnection
-        if not connection:
+        if connection:
+            conn = connection[0]
+        else:
             conn = ZkConnection()
-            conn.connect()
             connection.append(conn)
-        if not connection[0].connected:
-            connection[0].connect()
-        return connection[0]
+        if not conn.connected:
+            conn.connect()
+        return conn
