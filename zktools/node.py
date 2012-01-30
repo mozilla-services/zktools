@@ -45,6 +45,7 @@ import json
 import re
 import threading
 
+import blinker
 import zookeeper
 
 ZOO_OPEN_ACL_UNSAFE = {"perms": 0x1f, "scheme": "world", "id": "anyone"}
@@ -99,8 +100,10 @@ def _save_value(value, use_json=False):
 class ZkNode(object):
     """Zookeeper Node
 
-    This object provides access to a single node for updating the
-    value that can also track changes to the value from Zookeeper.
+    This object provides access to a single node for updating the value
+    that can also track changes to the value from Zookeeper. Functions
+    can be subscribed to changes in the node's value and/or changes in
+    the node's children (nodes under it being created/removed).
 
     The value of the node is coerced into an appropriate Python
     object when loaded, current supported conversions::
@@ -136,10 +139,27 @@ class ZkNode(object):
         # Set the value in zookeeper
         node.value = 483.24
 
+        # Subscribe a function to be called when the node's
+        # children change
+        def my_function(node, prior_children):
+            # do something with node.children or prior_children
+        node.add_children_subscriber(my_function)
+
+        # Subscribe a function to be called when the node's
+        # data changes
+        def my_data_func(node, prior_value):
+            # do something with the new value of node.value
+        node.add_data_subscriber(my_data_func)
 
     The default behavior is to track changes to the node, so that
     the ``value`` attribute always reflects the node's value in
-    Zookeeper.
+    Zookeeper. Additional subscriber functions are called when the
+    Zookeeper event watch is triggered and are run in a separate
+    event thread. Depending on how fast the value/children are
+    changing the subscriber functions may run consecutively and
+    could miss intermediate values.
+
+    Return values of subscriber functions are ignored.
 
     .. warning::
 
@@ -148,6 +168,10 @@ class ZkNode(object):
         scenarios both for ZkNode and for application code using it.
 
     """
+    # Signals
+    children_change = blinker.Signal()
+    data_change = blinker.Signal()
+
     def __init__(self, connection, path, default=None, use_json=False,
                  permission=ZOO_OPEN_ACL_UNSAFE):
         """Create a Zookeeper Node
@@ -159,7 +183,6 @@ class ZkNode(object):
         In the event the node is deleted once this object is deleted
         once its being tracked, the ``deleted`` attribute will be
         ``True``.
-
 
         :param connection: zookeeper connection object
         :type connection: ZkConnection instance
@@ -179,7 +202,8 @@ class ZkNode(object):
         self._cv = threading.Condition()
         self._use_json = use_json
         self._value = None
-        self._reload = False
+        self._reload_data = self._reload_children = False
+        self._children = []
 
         with self._cv:
             if not connection.exists(path, self._created_watcher):
@@ -190,6 +214,7 @@ class ZkNode(object):
                 # Wait for the node to actually be created
                 self._cv.wait()
             self._load()
+            self._load_children()
 
     def _created_watcher(self, handle, type, state, path):
         """Watch for our node to be created before continuing"""
@@ -201,11 +226,26 @@ class ZkNode(object):
         """Watch a node for updates"""
         with self._cv:
             if type == zookeeper.CHANGED_EVENT:
+                prior_value = self._value
                 data = self._zk.get(self._path, self._node_watcher)[0]
                 self._value = _load_value(data, use_json=self._use_json)
+                self.data_change.send(self, prior_value=prior_value)
             elif type in (zookeeper.EXPIRED_SESSION_STATE,
                           zookeeper.AUTH_FAILED_STATE):
-                self._reload = True
+                self._reload_data = True
+            self._cv.notify_all()
+
+    def _children_watcher(self, handle, type, state, path):
+        """Watch a node for children changes"""
+        with self._cv:
+            if type == zookeeper.CHILD_EVENT:
+                prior_children = self._children
+                self._children = self._zk.get_children(
+                    self._path, self._children_watcher)
+                self.children_change.send(self, prior_children=prior_children)
+            elif type in (zookeeper.EXPIRED_SESSION_STATE,
+                          zookeeper.AUTH_FAILED_STATE):
+                self._reload_children = True
             self._cv.notify_all()
 
     def _load(self):
@@ -213,6 +253,18 @@ class ZkNode(object):
         with self._cv:
             data = self._zk.get(self._path, self._node_watcher)[0]
             self._value = _load_value(data, use_json=self._use_json)
+
+    def _load_children(self):
+        """Load children from the node"""
+        with self._cv:
+            self._children = self._zk.get_children(
+                self._path, self._children_watcher)
+
+    def add_children_subscriber(self, func):
+        self.children_change.connect(func, sender=self)
+
+    def add_data_subscriber(self, func):
+        self.data_change.connect(func, sender=self)
 
     @property
     def value(self):
@@ -222,7 +274,7 @@ class ZkNode(object):
         the value reloaded.
 
         """
-        if self._reload:
+        if self._reload_data:
             self._load()
             self._reload = False
         return self._value
@@ -241,6 +293,19 @@ class ZkNode(object):
 
             # Now wait to see that it triggered our change event
             self._cv.wait()
+
+    @property
+    def children(self):
+        """Returns the node's children
+
+        If the Zookeeper session expired, it will be reconnected and
+        the value reloaded.
+
+        """
+        if self._reload_children:
+            self._load_children()
+            self._reload_children = False
+        return self._children
 
     @property
     def connected(self):

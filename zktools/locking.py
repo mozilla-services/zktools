@@ -176,7 +176,6 @@ class _LockBase(object):
         """
         # First clear out any prior revokation warnings
         self._locks.revoked = []
-        self._locks.removed = []
         revoke_lock = self._locks.revoked
 
         # Create a lock node
