@@ -12,6 +12,7 @@ with open(os.path.join(here, 'CHANGES.rst')) as f:
 
 reqs = [
     "clint>=0.3.0",
+    "blinker>=1.2",
 ]
 
 on_rtd = os.environ.get('READTHEDOCS', None) == 'True'
@@ -32,7 +33,7 @@ setup(name='zktools',
       author="Ben Bangert",
       author_email="bbangert@mozilla.com",
       url="http://zktools.readthedocs.org/",
-      license="MPL",
+      license="MPL2",
       packages=find_packages(),
       test_suite="zktools.tests",
       include_package_data=True,
