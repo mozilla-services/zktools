@@ -146,6 +146,10 @@ class ZkNode(object):
         if its not found will automatically create a blank string as
         the value.
 
+        The last time a :class:`ZkNode` has been modified either by
+        the user or due to a Zookeeper update is recorded as the
+        :obj:`ZkNode.last_modified` attribute.
+
         :param connection: zookeeper connection object
         :type connection: ZkConnection instance
         :param path: Path to the Zookeeper node
