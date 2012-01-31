@@ -11,6 +11,7 @@ import datetime
 import decimal
 import json
 import re
+import time
 import threading
 import UserDict
 
@@ -145,9 +146,9 @@ class ZkNode(object):
         if its not found will automatically create a blank string as
         the value.
 
-        In the event the node is deleted once this object is deleted
-        once its being tracked, the ``deleted`` attribute will be
-        ``True``.
+        The last time a :class:`ZkNode` has been modified either by
+        the user or due to a Zookeeper update is recorded as the
+        :attribute:`ZkNode.last_modified` attribute.
 
         :param connection: zookeeper connection object
         :type connection: ZkConnection instance
@@ -169,6 +170,7 @@ class ZkNode(object):
         self._value = None
         self._reload_data = self._reload_children = False
         self._children = []
+        self.last_modified = time.time()
         # Signals
         self.children_change = blinker.Signal()
         self.data_change = blinker.Signal()
@@ -198,6 +200,7 @@ class ZkNode(object):
                 data = self._zk.get(self._path, self._node_watcher)[0]
                 self._value = _load_value(data, use_json=self._use_json)
                 self.data_change.send(self, prior_value=prior_value)
+                self.last_modified = time.time()
             elif type in (zookeeper.EXPIRED_SESSION_STATE,
                           zookeeper.AUTH_FAILED_STATE):
                 self._reload_data = True
@@ -211,6 +214,7 @@ class ZkNode(object):
                 self._children = self._zk.get_children(
                     self._path, self._children_watcher)
                 self.children_change.send(self, prior_children=prior_children)
+                self.last_modified = time.time()
             elif type in (zookeeper.EXPIRED_SESSION_STATE,
                           zookeeper.AUTH_FAILED_STATE):
                 self._reload_children = True
