@@ -243,6 +243,13 @@ class ZkNode(object):
         event was triggered. A list of the current children can be
         found on :obj:`ZkNode.children`.
 
+        .. warning::
+
+            Subscriber functions must exist at compile-time to be
+            registered, as weak references are used for subscription.
+            This means functions declared within function scope cannot
+            be subscribed.
+
         """
         self.children_change.connect(func)
 
@@ -255,6 +262,13 @@ class ZkNode(object):
         The subscriber function will be called and passed two
         parameters, the node, and the prior value of the node. The
         current value can be found on :obj:`ZkNode.value`.
+
+        .. warning::
+
+            Subscriber functions must exist at compile-time to be
+            registered, as weak references are used for subscription.
+            This means functions declared within function scope cannot
+            be subscribed.
 
         """
         self.data_change.connect(func)
