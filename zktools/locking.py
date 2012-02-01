@@ -51,6 +51,7 @@ from clint.textui import columns
 from clint.textui import puts
 import zookeeper
 
+from zc.zk import ZooKeeper
 
 ZOO_OPEN_ACL_UNSAFE = {"perms": 0x1f, "scheme": "world", "id": "anyone"}
 IMMEDIATE = object()
@@ -78,7 +79,7 @@ class _LockBase(object):
         """Create a Zookeeper lock object
 
         :param connection: zookeeper connection object
-        :type connection: ZkConnection instance
+        :type connection: zc.zk ZooKeeper instance
         :param lock_root: Path to the root lock node to create the locks
                           under
         :type lock_root: string
@@ -492,7 +493,7 @@ def lock_cli():
                         "show"))
         return
 
-    conn = ZkConnection(options.host)
+    conn = ZooKeeper(options.host)
     conn.connect()
     if command == 'list':
         children = conn.get_children(options.lock_root)

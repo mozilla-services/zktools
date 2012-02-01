@@ -12,7 +12,6 @@ with open(os.path.join(here, 'CHANGES.rst')) as f:
 
 reqs = [
     "clint>=0.3.0",
-    "blinker>=1.2",
 ]
 
 on_rtd = os.environ.get('READTHEDOCS', None) == 'True'

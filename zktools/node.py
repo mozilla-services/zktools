@@ -15,7 +15,6 @@ import time
 import threading
 import UserDict
 
-import blinker
 import zookeeper
 
 ZOO_OPEN_ACL_UNSAFE = {"perms": 0x1f, "scheme": "world", "id": "anyone"}
@@ -97,10 +96,10 @@ class ZkNode(object):
 
     Example::
 
-        from zktools.connection import ZkConnection
+        from zc.zk import ZooKeeper
         from zktools.node import ZkNode
 
-        conn = ZkConnection()
+        conn = ZooKeeper()
         node = ZkNode(conn, '/some/config/node')
 
         # prints out the current value, defaults to None
@@ -109,17 +108,15 @@ class ZkNode(object):
         # Set the value in zookeeper
         node.value = 483.24
 
-        # Subscribe a function to be called when the node's
-        # children change
-        def my_function(node, prior_children):
-            # do something with node.children or prior_children
-        node.add_children_subscriber(my_function)
+        # Show the children of the node
+        print list(node.children)
 
         # Subscribe a function to be called when the node's
-        # data changes
-        def my_data_func(node, prior_value):
-            # do something with the new value of node.value
-        node.add_data_subscriber(my_data_func)
+        # children change (note this will be called immediately
+        # with a zc.zk Children instance)
+        @node.children
+        def my_function(children):
+            # do something with node.children or prior_children
 
     The default behavior is to track changes to the node, so that
     the ``value`` attribute always reflects the node's value in
@@ -151,7 +148,7 @@ class ZkNode(object):
         :obj:`ZkNode.last_modified` attribute.
 
         :param connection: zookeeper connection object
-        :type connection: ZkConnection instance
+        :type connection: zc.zk ZooKeeper instance
         :param path: Path to the Zookeeper node
         :type path: str
         :param default: A default value if the node is being created
@@ -168,12 +165,8 @@ class ZkNode(object):
         self._cv = threading.Condition()
         self._use_json = use_json
         self._value = None
-        self._reload_data = self._reload_children = False
-        self._children = []
+        self._reload_data = False
         self.last_modified = time.time()
-        # Signals
-        self.children_change = blinker.Signal()
-        self.data_change = blinker.Signal()
 
         with self._cv:
             if not connection.exists(path, self._created_watcher):
@@ -184,7 +177,7 @@ class ZkNode(object):
                 # Wait for the node to actually be created
                 self._cv.wait()
             self._load()
-            self._load_children()
+            self.children = connection.children(path)
 
     def _created_watcher(self, handle, type, state, path):
         """Watch for our node to be created before continuing"""
@@ -196,28 +189,12 @@ class ZkNode(object):
         """Watch a node for updates"""
         with self._cv:
             if type == zookeeper.CHANGED_EVENT:
-                prior_value = self._value
                 data = self._zk.get(self._path, self._node_watcher)[0]
                 self._value = _load_value(data, use_json=self._use_json)
-                self.data_change.send(self, prior_value=prior_value)
                 self.last_modified = time.time()
             elif type in (zookeeper.EXPIRED_SESSION_STATE,
                           zookeeper.AUTH_FAILED_STATE):
                 self._reload_data = True
-            self._cv.notify_all()
-
-    def _children_watcher(self, handle, type, state, path):
-        """Watch a node for children changes"""
-        with self._cv:
-            if type == zookeeper.CHILD_EVENT:
-                prior_children = self._children
-                self._children = self._zk.get_children(
-                    self._path, self._children_watcher)
-                self.children_change.send(self, prior_children=prior_children)
-                self.last_modified = time.time()
-            elif type in (zookeeper.EXPIRED_SESSION_STATE,
-                          zookeeper.AUTH_FAILED_STATE):
-                self._reload_children = True
             self._cv.notify_all()
 
     def _load(self):
@@ -225,53 +202,6 @@ class ZkNode(object):
         with self._cv:
             data = self._zk.get(self._path, self._node_watcher)[0]
             self._value = _load_value(data, use_json=self._use_json)
-
-    def _load_children(self):
-        """Load children from the node"""
-        with self._cv:
-            self._children = self._zk.get_children(
-                self._path, self._children_watcher)
-
-    def add_children_subscriber(self, func):
-        """Add a subscriber function for children event changes
-
-        :param func: Function to register
-        :type func: function
-
-        The subscriber function will be called and passed two
-        parameters, the node, and a list of the children before the
-        event was triggered. A list of the current children can be
-        found on :obj:`ZkNode.children`.
-
-        .. warning::
-
-            Subscriber functions must exist at compile-time to be
-            registered, as weak references are used for subscription.
-            This means functions declared within function scope cannot
-            be subscribed.
-
-        """
-        self.children_change.connect(func)
-
-    def add_data_subscriber(self, func):
-        """Add a subscriber function for data value changes
-
-        :param func: Function to register
-        :type func: function
-
-        The subscriber function will be called and passed two
-        parameters, the node, and the prior value of the node. The
-        current value can be found on :obj:`ZkNode.value`.
-
-        .. warning::
-
-            Subscriber functions must exist at compile-time to be
-            registered, as weak references are used for subscription.
-            This means functions declared within function scope cannot
-            be subscribed.
-
-        """
-        self.data_change.connect(func)
 
     @property
     def value(self):
@@ -302,19 +232,6 @@ class ZkNode(object):
             self._cv.wait()
 
     @property
-    def children(self):
-        """Returns the node's children
-
-        If the Zookeeper session expired, it will be reconnected and
-        the value reloaded.
-
-        """
-        if self._reload_children:
-            self._load_children()
-            self._reload_children = False
-        return self._children
-
-    @property
     def connected(self):
         """Indicate whether a connection to Zookeeper exists"""
         return self._zk.connected
@@ -334,10 +251,10 @@ class ZkNodeDict(UserDict.DictMixin):
 
     Example::
 
-        from zktools.connection import ZkConnection
+        from zc.zk import ZooKeeper
         from zktools.node import ZkNode
 
-        conn = ZkConnection()
+        conn = ZooKeeper()
         nodedict = ZkNodeDict(conn, '/some/config/nodetree')
 
         # see the keys
@@ -355,7 +272,7 @@ class ZkNodeDict(UserDict.DictMixin):
         """Create a ZkNodeDict object
 
         :param connection: zookeeper connection object
-        :type connection: ZkConnection instance
+        :type connection: zc.zk ZooKeeper instance
         :param path: Path to the Zookeeper node
         :type path: str
         :param permission: Node permission to use if the node is being
@@ -378,7 +295,7 @@ class ZkNodeDict(UserDict.DictMixin):
             old_set = set(nodes.keys())
             new_set = set(children)
             for name in new_set - old_set:
-                if name in self._node_dict:
+                if name in nodes:
                     continue
                 nodes[name] = ZkNode(zk, '%s/%s' % (path, name),
                                      permission=permission)
@@ -392,7 +309,7 @@ class ZkNodeDict(UserDict.DictMixin):
 
     def keys(self):
         """Return the current node keys"""
-        return self._node_dict.keys()
+        return self._nodes.keys()
 
     def __getitem__(self, name):
         """Retrieve the value from the underlying node"""
