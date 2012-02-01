@@ -2,7 +2,7 @@
 Zookeeper Tools
 ===============
 
-``zktools`` is a package of tools implementating higher level constructs using
+``zktools`` is a package of tools implementing higher level constructs using
 `Apache Zookeeper`_.
 
 It currently provides:

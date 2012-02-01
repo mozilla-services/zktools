@@ -282,7 +282,7 @@ class _LockBase(object):
         .. warning::
 
             You must be sure this is a dead lock, as clearing it will
-            forcably release it by deleting all lock nodes.
+            forcibly release it by deleting all lock nodes.
 
         :returns: True if the lock was cleared, or False if it
                   is no longer valid.
@@ -379,7 +379,7 @@ class ZkLock(_LockBase):
 class ZkReadLock(_LockBase):
     """Shared Zookeeper Read Lock
 
-    A read-lock is considered succesful if there are no active write
+    A read-lock is considered successful if there are no active write
     locks.
 
     This class takes the same initialization parameters as
@@ -410,7 +410,7 @@ class ZkReadLock(_LockBase):
 class ZkWriteLock(_LockBase):
     """Shared Zookeeper Write Lock
 
-    A write-lock is only succesful if there are no read or write locks
+    A write-lock is only successful if there are no read or write locks
     active.
 
     This class takes the same initialization parameters as
@@ -512,12 +512,12 @@ def lock_cli():
             puts(columns([child, col1], [status, col2]))
     elif command == 'remove':
         if len(args) < 2:
-            puts(colored.red("You ust specify a node to remove."))
+            puts(colored.red("You must specify a node to remove."))
             return
         conn.delete(options.lock_root + '/' + args[1])
     elif command == 'show':
         if len(args) < 2:
-            puts(colored.red("You ust specify a node to show."))
+            puts(colored.red("You must specify a node to show."))
             return
         children = conn.get_children(options.lock_root + '/' + args[1])
 
