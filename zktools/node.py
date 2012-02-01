@@ -366,28 +366,18 @@ class ZkNodeDict(UserDict.DictMixin):
         self._zk = connection
         self._path = path
         self._node_dict = {}
-        self._cv = threading.Condition()
+        self._cv = threading.Event()
         self._permission = permission
 
         # Update children nodes
 
         # Do our initial load of the main node
-        self._node = node = ZkNode(self._zk, self._path)
+        self._node = ZkNode(self._zk, self._path)
 
-        # We lock here to ensure the child_watcher isn't called
-        # till we're done with the initial load
-        with self._cv:
-            node.add_children_subscriber(self._child_watcher)
-            for name in node.children:
-                self._node_dict[name] = ZkNode(self._zk,
-                    '%s/%s' % (self._path, name),
-                    permission=self._permission)
-
-    def _child_watcher(self, sender, prior_children):
-        """Watches the node for child updates"""
-        with self._cv:
-            old_set = set(prior_children)
-            new_set = set(sender.children)
+        @self._zk.children(self._path)
+        def child_watcher(children):
+            old_set = set(self._node_dict.keys())
+            new_set = set(children)
             for name in new_set - old_set:
                 if name in self._node_dict:
                     continue
@@ -396,7 +386,11 @@ class ZkNodeDict(UserDict.DictMixin):
                     permission=self._permission)
             for name in old_set - new_set:
                 del self._node_dict[name]
-            self._cv.notify_all()
+            self._cv.set()
+
+        # We hold a reference to our function to ensure its still
+        # tracked since the decorator above uses a weak-ref
+        self._child_watch = child_watcher
 
     def keys(self):
         """Return the current node keys"""
@@ -413,21 +407,20 @@ class ZkNodeDict(UserDict.DictMixin):
         """Set an item in the node tree"""
         if not isinstance(name, str):
             raise Exception("Key names must be strings.")
-        with self._cv:
-            if name in self._node_dict:
-                self._node_dict[name].value = value
-            else:
-                self._node_dict[name] = ZkNode(self._zk,
-                    '%s/%s' % (self._path, name), default=value,
-                    permission=self._permission)
+        if name in self._node_dict:
+            self._node_dict[name].value = value
+        else:
+            self._node_dict[name] = ZkNode(self._zk,
+                '%s/%s' % (self._path, name), default=value,
+                permission=self._permission)
 
     def __delitem__(self, name):
         """Delete an item in Zookeeper, and wait for the
         delete notification to remove it from the ZkNodeDict"""
-        with self._cv:
-            if name not in self._node_dict:
-                raise KeyError
-            else:
-                self._zk.delete('%s/%s' % (self._path, name))
-                # Wait for the delete to trigger
-                self._cv.wait()
+        self._cv.clear()
+        if name not in self._node_dict:
+            raise KeyError
+        else:
+            self._zk.delete('%s/%s' % (self._path, name))
+            # Wait for the delete to trigger
+            self._cv.wait()
