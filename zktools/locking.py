@@ -51,8 +51,6 @@ from clint.textui import columns
 from clint.textui import puts
 import zookeeper
 
-from zktools.connection import ZkConnection
-
 
 ZOO_OPEN_ACL_UNSAFE = {"perms": 0x1f, "scheme": "world", "id": "anyone"}
 IMMEDIATE = object()

@@ -19,6 +19,7 @@ on_rtd = os.environ.get('READTHEDOCS', None) == 'True'
 if not on_rtd:
     reqs.extend([
         "zc-zookeeper-static>=3.3.4.0",
+        "zc.zk>=0.7.0"
     ])
 
 setup(

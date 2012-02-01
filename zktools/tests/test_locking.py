@@ -12,7 +12,8 @@ class TestLocking(TestBase):
 
     def setUp(self):
         if self.conn.exists('/ZktoolsLocks/zkLockTest'):
-            self.conn.delete('/ZktoolsLocks/zkLockTest')
+            self.conn.delete_recursive(
+                '/ZktoolsLocks/zkLockTest', force=True)
 
     def testBasicLock(self):
         lock = self.makeOne('zkLockTest')
@@ -199,7 +200,7 @@ class TestSharedLocks(TestLocking):
         vals = []
         ev = threading.Event()
 
-        def reader():
+        def readera():
             with r1.acquire():
                 ev.set()
                 vals.append(1)
@@ -207,11 +208,10 @@ class TestSharedLocks(TestLocking):
                 while not r1.revoked:
                     val += 1
 
-        reader = threading.Thread(target=reader)
+        reader = threading.Thread(target=readera)
         reader.start()
         ev.wait()
         eq_(vals, [1])
-        eq_(w1.connected, True)
         w1.clear()
         reader.join()
         eq_(vals, [1])
