@@ -8,10 +8,6 @@ failure.
 
 Features:
 
-* **Connection Object** -  A :class:`Zookeeper Connection 
-  <zktools.connection.ZkConnection>` object that handles proxying calls to
-  zookeeper using the correct zookeeper handle, and re-establishing the
-  connection during connection loss in a call.
 * **Locks** - A :mod:`Zookeeper lock <zktools.locking>` with support for
   non-blocking acquire, shared read/write locks, and modeled on Python's
   Lock objects that also includes `Revocable Shared Locks with Freaking 
