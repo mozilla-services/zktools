@@ -365,27 +365,26 @@ class ZkNodeDict(UserDict.DictMixin):
         """
         self._zk = zk = connection
         self._path = path
-        self._node_dict = {}
-        self._cv = threading.Event()
+        self._nodes = nodes = {}
+        self._cv = cv = threading.Event()
         self._permission = permission
 
         # Do our initial load of the main node
-        if not zk.exists(self._path):
-            zk.create_recursive(self._path, '', permission)
+        if not zk.exists(path):
+            zk.create_recursive(path, '', permission)
 
-        @zk.children(self._path)
+        @zk.children(path)
         def child_watcher(children):
-            old_set = set(self._node_dict.keys())
+            old_set = set(nodes.keys())
             new_set = set(children)
             for name in new_set - old_set:
                 if name in self._node_dict:
                     continue
-                self._node_dict[name] = ZkNode(self._zk,
-                    '%s/%s' % (self._path, name),
-                    permission=self._permission)
+                nodes[name] = ZkNode(zk, '%s/%s' % (path, name),
+                                     permission=permission)
             for name in old_set - new_set:
-                del self._node_dict[name]
-            self._cv.set()
+                del nodes[name]
+            cv.set()
 
         # We hold a reference to our function to ensure its still
         # tracked since the decorator above uses a weak-ref
@@ -397,19 +396,19 @@ class ZkNodeDict(UserDict.DictMixin):
 
     def __getitem__(self, name):
         """Retrieve the value from the underlying node"""
-        if name not in self._node_dict:
+        if name not in self._nodes:
             raise KeyError
         else:
-            return self._node_dict[name].value
+            return self._nodes[name].value
 
     def __setitem__(self, name, value):
         """Set an item in the node tree"""
         if not isinstance(name, str):
             raise Exception("Key names must be strings.")
-        if name in self._node_dict:
-            self._node_dict[name].value = value
+        if name in self._nodes:
+            self._nodes[name].value = value
         else:
-            self._node_dict[name] = ZkNode(self._zk,
+            self._nodes[name] = ZkNode(self._zk,
                 '%s/%s' % (self._path, name), default=value,
                 permission=self._permission)
 
@@ -417,7 +416,7 @@ class ZkNodeDict(UserDict.DictMixin):
         """Delete an item in Zookeeper, and wait for the
         delete notification to remove it from the ZkNodeDict"""
         self._cv.clear()
-        if name not in self._node_dict:
+        if name not in self._nodes:
             raise KeyError
         else:
             self._zk.delete('%s/%s' % (self._path, name))
