@@ -90,7 +90,7 @@ class ZkNode(object):
     .. note::
 
         The JSON determination is extremely lax, if its a string that
-        starts and ends with brackets or curley marks, its assumed to
+        starts and ends with brackets or curly marks, its assumed to
         be a JSON object and will be coerced if possible. If coercion
         fails, the string will be returned as is.
 
