@@ -363,18 +363,17 @@ class ZkNodeDict(UserDict.DictMixin):
         :type permission: dict
 
         """
-        self._zk = connection
+        self._zk = zk = connection
         self._path = path
         self._node_dict = {}
         self._cv = threading.Event()
         self._permission = permission
 
-        # Update children nodes
-
         # Do our initial load of the main node
-        self._node = ZkNode(self._zk, self._path)
+        if not zk.exists(self._path):
+            zk.create_recursive(self._path, '', permission)
 
-        @connection.children(self._path)
+        @zk.children(self._path)
         def child_watcher(children):
             old_set = set(self._node_dict.keys())
             new_set = set(children)
