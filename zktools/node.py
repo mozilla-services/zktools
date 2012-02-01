@@ -374,7 +374,7 @@ class ZkNodeDict(UserDict.DictMixin):
         # Do our initial load of the main node
         self._node = ZkNode(self._zk, self._path)
 
-        @self._zk.children(self._path)
+        @connection.children(self._path)
         def child_watcher(children):
             old_set = set(self._node_dict.keys())
             new_set = set(children)
