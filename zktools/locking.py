@@ -494,7 +494,6 @@ def lock_cli():
         return
 
     conn = ZooKeeper(options.host)
-    conn.connect()
     if command == 'list':
         children = conn.get_children(options.lock_root)
 
