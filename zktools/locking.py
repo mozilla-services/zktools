@@ -5,7 +5,7 @@
 
 This module provides a :class:`ZkLock`, which should look familiar to anyone
 that has used Python's ``threading.Lock`` class. In addition to normal locking
-behavior, revokable shared read/write locks with are also supported. All of the
+behavior, revokable shared read/write locks are also supported. All of the
 locks can be revoked as desired. This requires the current lock holder(s) to
 release their lock(s).
 
@@ -78,12 +78,12 @@ class _LockBase(object):
                  logfile=None):
         """Create a Zookeeper lock object
 
-        :param connection: zookeeper connection object
-        :type connection: zc.zk ZooKeeper instance
+        :param connection: Zookeeper connection object
+        :type connection: zc.zk Zookeeper instance
         :param lock_root: Path to the root lock node to create the locks
                           under
         :type lock_root: string
-        :param logfile: Path to a file to log the zookeeper stream to
+        :param logfile: Path to a file to log the Zookeeper stream to
         :type logfile: string
 
         """
@@ -110,7 +110,7 @@ class _LockBase(object):
                            [ZOO_OPEN_ACL_UNSAFE], 0)
         except zookeeper.NodeExistsException:
             if self._log_debug:
-                log.debug("Lock node in zookeeper already created")
+                log.debug("Lock node in Zookeeper already created")
 
         # Try and create our locking node
         try:
@@ -141,7 +141,7 @@ class _LockBase(object):
         :rtype: bool
 
         """
-        # First clear out any prior revokation warnings
+        # First clear out any prior revocation warnings
         self._locks.revoked = []
         revoke_lock = self._locks.revoked
 
@@ -152,7 +152,7 @@ class _LockBase(object):
 
         def revoke_watcher(handle, type, state, path):
             # This method must be in closure scope to ensure that
-            # it can append to the thread acquire is called from
+            # it can append to the thread it is called from
             # to indicate if this particular thread's lock was
             # revoked or removed
             if type == zookeeper.CHANGED_EVENT:

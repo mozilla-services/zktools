@@ -89,8 +89,8 @@ class ZkNode(object):
 
     .. note::
 
-        The JSON determination is extremely lax, if its a string that
-        starts and ends with brackets or curly marks, its assumed to
+        The JSON determination is extremely lax, if it is a string that
+        starts and ends with brackets or curly marks, it is assumed to
         be a JSON object and will be coerced if possible. If coercion
         fails, the string will be returned as is.
 
@@ -140,15 +140,15 @@ class ZkNode(object):
         """Create a Zookeeper Node
 
         Creating a ZkNode by default attempts to load the value, and
-        if its not found will automatically create a blank string as
+        if it is not found will automatically create a blank string as
         the value.
 
         The last time a :class:`ZkNode` has been modified either by
         the user or due to a Zookeeper update is recorded as the
         :obj:`ZkNode.last_modified` attribute.
 
-        :param connection: zookeeper connection object
-        :type connection: zc.zk ZooKeeper instance
+        :param connection: Zookeeper connection object
+        :type connection: zc.zk Zookeeper instance
         :param path: Path to the Zookeeper node
         :type path: str
         :param default: A default value if the node is being created
@@ -218,7 +218,7 @@ class ZkNode(object):
 
     @value.setter
     def value(self, value):
-        """Set the value with a new one
+        """Set the value to a new one
 
         :param value: The value of the node
         :type value: Any str'able object
@@ -271,8 +271,8 @@ class ZkNodeDict(UserDict.DictMixin):
     def __init__(self, connection, path, permission=ZOO_OPEN_ACL_UNSAFE):
         """Create a ZkNodeDict object
 
-        :param connection: zookeeper connection object
-        :type connection: zc.zk ZooKeeper instance
+        :param connection: Zookeeper connection object
+        :type connection: zc.zk Zookeeper instance
         :param path: Path to the Zookeeper node
         :type path: str
         :param permission: Node permission to use if the node is being
@@ -303,7 +303,7 @@ class ZkNodeDict(UserDict.DictMixin):
                 del nodes[name]
             cv.set()
 
-        # We hold a reference to our function to ensure its still
+        # We hold a reference to our function to ensure it is still
         # tracked since the decorator above uses a weak-ref
         self._child_watch = child_watcher
 
