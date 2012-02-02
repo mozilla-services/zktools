@@ -343,11 +343,11 @@ class ZkLock(_LockBase):
 
     Example::
 
-        from zktools.connection import ZkConnection
+        from zc.zk import ZooKeeper
         from zktools.locking import ZkLock
 
         # Create a connection and a lock
-        conn = ZkConnection()
+        conn = ZooKeeper()
         my_lock = ZkLock(conn, "my_lock_name")
 
         my_lock.acquire() # wait to acquire lock
