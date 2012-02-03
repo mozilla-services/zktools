@@ -2,8 +2,8 @@
 Zookeeper Tools
 ===============
 
-A collection of higher-level API's built on top of `Apache Zookeeper`_, a
-distributed, highly reliable coordination service with no single point of
+A Python collection of higher-level API's built on top of `Apache Zookeeper`_,
+a distributed, highly reliable coordination service with no single point of
 failure.
 
 Features:
@@ -11,9 +11,9 @@ Features:
 * :mod:`Locks <zktools.locking>` - Support for non-blocking acquire, shared
   read/write locks, and modeled on Python's
   Lock objects that also includes `Revocable Shared Locks with Freaking 
-  Laser Beams` described in the `Zookeeper Recipes`_.
+  Laser Beams` as described in the `Zookeeper Recipes`_.
 * :mod:`Nodes <zktools.node>` - Objects to track values in Zookeeper
-  Nodes automatically.
+  Nodes (zNodes) automatically.
 
 Reference Material
 ==================
@@ -26,13 +26,16 @@ Reference material includes documentation for every `zktools` API.
    api
    Changelog <changelog>
 
+Source Code
+===========
+
+All source code is available on `github under zktools <https://github.com/mozilla-services/zktools>`_.
 
 Indices and tables
 ==================
 
 * :ref:`genindex`
 * :ref:`modindex`
-* :ref:`search`
 * :ref:`glossary`
 
 License

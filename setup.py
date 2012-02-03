@@ -32,7 +32,7 @@ setup(
         "License :: OSI Approved :: Mozilla Public License 2.0 (MPL 2.0)",
     ],
     keywords='zookeeper lock leader configuration',
-    author="Ben Bangert",
+    author="Mozilla Foundation",
     author_email="bbangert@mozilla.com",
     url="http://zktools.readthedocs.org/",
     license="MPLv2.0",

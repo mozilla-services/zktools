@@ -3,8 +3,8 @@
 # You can obtain one at http://mozilla.org/MPL/2.0/.
 """Zookeeper Nodes
 
-This module provides a :class:`ZkNode` object which can load itself from
-a Zookeeper path, and serialize itself back.
+This module provides a :class:`ZkNode` and a :class:`ZkNodeDict` object which
+can either a single node, or a tree of nodes from Zookeeper.
 
 """
 import datetime
@@ -17,7 +17,8 @@ import UserDict
 
 import zookeeper
 
-ZOO_OPEN_ACL_UNSAFE = dict(perms=zookeeper.PERM_ALL, scheme='world', id='anyone')
+ZOO_OPEN_ACL_UNSAFE = dict(perms=zookeeper.PERM_ALL, scheme='world',
+                           id='anyone')
 
 
 CONVERSIONS = {
@@ -266,7 +267,6 @@ class ZkNodeDict(UserDict.DictMixin):
 
         # delete a value
         del nodedict['my_key']
-
 
     """
     def __init__(self, connection, path, permission=ZOO_OPEN_ACL_UNSAFE):
