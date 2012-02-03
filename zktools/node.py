@@ -136,7 +136,7 @@ class ZkNode(object):
 
     """
     def __init__(self, connection, path, default=None, use_json=False,
-                 permission=ZOO_OPEN_ACL_UNSAFE):
+                 permission=ZOO_OPEN_ACL_UNSAFE, create_mode=0):
         """Create a Zookeeper Node
 
         Creating a ZkNode by default attempts to load the value, and
@@ -158,7 +158,8 @@ class ZkNode(object):
         :param permission: Node permission to use if the node is being
                            created.
         :type permission: dict
-
+        :param create_mode: Persistent or ephemeral creation mode
+        :type create_mode: int
         """
         self._zk = connection
         self._path = path
@@ -172,7 +173,7 @@ class ZkNode(object):
             if not connection.exists(path, self._created_watcher):
                 self._zk.create(self._path,
                                 _save_value(default, use_json=use_json),
-                                [permission], 0)
+                                [permission], create_mode)
 
                 # Wait for the node to actually be created
                 self._cv.wait()
