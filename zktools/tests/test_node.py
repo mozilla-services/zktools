@@ -3,6 +3,7 @@ import decimal
 import time
 
 from nose.tools import eq_
+from nose.tools import raises
 
 
 from zktools.tests import TestBase
@@ -14,8 +15,8 @@ class TestConfig(TestBase):
         return ZkNode(self.conn, *args, **kwargs)
 
     def setUp(self):
-        n = self.makeOne('/zkTestNode')
-        n._zk.delete('/zkTestNode')
+        if self.conn.exists('/zkTestNode'):
+            self.conn.delete_recursive('/zkTestNode')
 
     def testSetDefaultValue(self):
         n = self.makeOne('/zkTestNode', 234)
@@ -75,3 +76,54 @@ class TestConfig(TestBase):
         n1.value = now = datetime.datetime.today()
         n1._reload = True
         eq_(n1.value, now)
+
+
+class TestNodeDict(TestBase):
+    def makeOne(self, *args, **kwargs):
+        from zktools.node import ZkNodeDict
+        return ZkNodeDict(self.conn, *args, **kwargs)
+
+    def setUp(self):
+        if self.conn.exists('/zkTestNode'):
+            self.conn.delete_recursive('/zkTestNode')
+
+    def testBasic(self):
+        n = self.makeOne('/zkTestNode')
+        eq_(n, {})
+        n['testval'] = 42
+        eq_(n, {'testval': 42})
+        n['testval'] = 'smith'
+        eq_(n, {'testval': 'smith'})
+        eq_(n.keys(), ['testval'])
+        del n['testval']
+        eq_(n, {})
+
+    def testExceptions(self):
+        n = self.makeOne('/zkTestNode')
+        n['testval'] = 42
+
+        @raises(KeyError)
+        def testit():
+            del n['happyfeet']
+        testit()
+
+        @raises(Exception)
+        def testanother():
+            n[4923] = 'not happening'
+        testanother()
+
+        @raises(KeyError)
+        def testmore():
+            print n['oops']
+        testmore()
+        eq_(n.keys(), ['testval'])
+
+    def testNodeDeleteByOther(self):
+        n = self.makeOne('/zkTestNode')
+        n['testval'] = 42
+
+        n._cv.clear()
+        self.conn.delete('/zkTestNode/testval')
+        n._cv.wait()
+
+        eq_(n, {})
