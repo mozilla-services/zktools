@@ -9,12 +9,10 @@ connection = []
 class TestBase(unittest.TestCase):
     @property
     def conn(self):
-        from zktools.connection import ZkConnection
+        from zc.zk import ZooKeeper
         if connection:
             conn = connection[0]
         else:
-            conn = ZkConnection()
+            conn = ZooKeeper()
             connection.append(conn)
-        if not conn.connected:
-            conn.connect()
         return conn

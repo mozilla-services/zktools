@@ -12,7 +12,8 @@ class TestLocking(TestBase):
 
     def setUp(self):
         if self.conn.exists('/ZktoolsLocks/zkLockTest'):
-            self.conn.delete('/ZktoolsLocks/zkLockTest')
+            self.conn.delete_recursive(
+                '/ZktoolsLocks/zkLockTest', force=True)
 
     def testBasicLock(self):
         lock = self.makeOne('zkLockTest')
@@ -27,7 +28,7 @@ class TestLocking(TestBase):
         vals = []
 
         def run():
-            with lock2.acquire():
+            with lock2:
                 vals.append(2)
         waiter = threading.Thread(target=run)
         lock1.acquire()
@@ -45,7 +46,7 @@ class TestLocking(TestBase):
         ev = threading.Event()
 
         def run():
-            with lock2.acquire():
+            with lock2:
                 vals.append(2)
                 ev.set()
                 val = 0
@@ -61,7 +62,7 @@ class TestLocking(TestBase):
         lock1.revoke_all()
         ev.wait()
         waiter.join()
-        with lock1.acquire():
+        with lock1:
             vals.append(3)
         eq_(vals, [2, 3])
 
@@ -83,11 +84,11 @@ class TestSharedLocks(TestLocking):
         vals = []
 
         def reader():
-            with r2.acquire():
+            with r2:
                 vals.append('r')
 
         def writer():
-            with w1.acquire():
+            with w1:
                 vals.append('w')
 
         read2 = threading.Thread(target=reader)
@@ -110,7 +111,7 @@ class TestSharedLocks(TestLocking):
         vals = []
 
         def reader():
-            with r1.acquire():
+            with r1:
                 ev.set()
                 vals.append(1)
                 val = 0
@@ -118,7 +119,7 @@ class TestSharedLocks(TestLocking):
                     val += 1
 
         def writer():
-            with w1.acquire(revoke=IMMEDIATE):
+            with w1(revoke=IMMEDIATE):
                 vals.append(2)
 
         reader = threading.Thread(target=reader)
@@ -138,7 +139,7 @@ class TestSharedLocks(TestLocking):
         vals = []
 
         def reader():
-            with r1.acquire():
+            with r1:
                 ev.set()
                 vals.append(1)
                 val = 0
@@ -146,7 +147,7 @@ class TestSharedLocks(TestLocking):
                     val += 1
 
         def writer():
-            with w1.acquire(revoke=True):
+            with w1(revoke=True):
                 vals.append(2)
 
         reader = threading.Thread(target=reader)
@@ -167,7 +168,7 @@ class TestSharedLocks(TestLocking):
         ev = threading.Event()
 
         def reader():
-            with r1.acquire():
+            with r1:
                 ev.set()
                 vals.append(1)
                 val = 0
@@ -179,7 +180,7 @@ class TestSharedLocks(TestLocking):
             if result:  # pragma: nocover
                 vals.append(2)
             vals.append(3)
-            with w1.acquire(revoke=True):
+            with w1(revoke=True):
                 vals.append(4)
 
         reader = threading.Thread(target=reader)
@@ -199,19 +200,18 @@ class TestSharedLocks(TestLocking):
         vals = []
         ev = threading.Event()
 
-        def reader():
-            with r1.acquire():
+        def readera():
+            with r1:
                 ev.set()
                 vals.append(1)
                 val = 0
                 while not r1.revoked:
                     val += 1
 
-        reader = threading.Thread(target=reader)
+        reader = threading.Thread(target=readera)
         reader.start()
         ev.wait()
         eq_(vals, [1])
-        eq_(w1.connected, True)
         w1.clear()
         reader.join()
         eq_(vals, [1])

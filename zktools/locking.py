@@ -5,7 +5,7 @@
 
 This module provides a :class:`ZkLock`, which should look familiar to anyone
 that has used Python's ``threading.Lock`` class. In addition to normal locking
-behavior, revokable shared read/write locks with are also supported. All of the
+behavior, revokable shared read/write locks are also supported. All of the
 locks can be revoked as desired. This requires the current lock holder(s) to
 release their lock(s).
 
@@ -51,26 +51,12 @@ from clint.textui import columns
 from clint.textui import puts
 import zookeeper
 
-from zktools.connection import ZkConnection
-
+from zc.zk import ZooKeeper
 
 ZOO_OPEN_ACL_UNSAFE = {"perms": 0x1f, "scheme": "world", "id": "anyone"}
 IMMEDIATE = object()
 
 log = logging.getLogger(__name__)
-
-
-class CtxManager(object):
-    """A lock context manager"""
-    def __init__(self, lock_object):
-        self._lock_object = lock_object
-
-    def __enter__(self):
-        return None  # No useful object will be supplied for 'as'
-
-    def __exit__(self, exc_type, exc_value, traceback):
-        self._lock_object.release()
-        return None  # Return a non-true value to propagate exc
 
 
 class _LockBase(object):
@@ -79,12 +65,12 @@ class _LockBase(object):
                  logfile=None):
         """Create a Zookeeper lock object
 
-        :param connection: zookeeper connection object
-        :type connection: ZkConnection instance
+        :param connection: Zookeeper connection object
+        :type connection: zc.zk Zookeeper instance
         :param lock_root: Path to the root lock node to create the locks
                           under
         :type lock_root: string
-        :param logfile: Path to a file to log the zookeeper stream to
+        :param logfile: Path to a file to log the Zookeeper stream to
         :type logfile: string
 
         """
@@ -93,6 +79,7 @@ class _LockBase(object):
         self._lock_root = lock_root
         self._locks = threading.local()
         self._locks.revoked = []
+        self._locks.lock_args = ([], {})
         self._log_debug = logging.DEBUG >= log.getEffectiveLevel()
         if logfile:
             zookeeper.set_log_stream(open(logfile))
@@ -111,7 +98,7 @@ class _LockBase(object):
                            [ZOO_OPEN_ACL_UNSAFE], 0)
         except zookeeper.NodeExistsException:
             if self._log_debug:
-                log.debug("Lock node in zookeeper already created")
+                log.debug("Lock node in Zookeeper already created")
 
         # Try and create our locking node
         try:
@@ -142,7 +129,7 @@ class _LockBase(object):
         :rtype: bool
 
         """
-        # First clear out any prior revokation warnings
+        # First clear out any prior revocation warnings
         self._locks.revoked = []
         revoke_lock = self._locks.revoked
 
@@ -153,7 +140,7 @@ class _LockBase(object):
 
         def revoke_watcher(handle, type, state, path):
             # This method must be in closure scope to ensure that
-            # it can append to the thread acquire is called from
+            # it can append to the thread it is called from
             # to indicate if this particular thread's lock was
             # revoked or removed
             if type == zookeeper.CHANGED_EVENT:
@@ -238,7 +225,19 @@ class _LockBase(object):
             cv.wait(wait_for)
             first_run = False
         self._locks.lock_node = znode
-        return CtxManager(self)
+        return True
+
+    def __call__(self, *args, **kwargs):
+        self._locks.lock_args = (args, kwargs)
+        return self
+
+    def __enter__(self):
+        args, kwargs = getattr(self._locks, 'lock_args', ([], {}))
+        self.acquire(*args, **kwargs)
+
+    def __exit__(self, exc_type, exc_value, traceback):
+        self._locks.lock_args = ([], {})
+        self.release()
 
     def release(self):
         """Release a lock
@@ -284,7 +283,7 @@ class _LockBase(object):
         .. warning::
 
             You must be sure this is a dead lock, as clearing it will
-            forcably release it by deleting all lock nodes.
+            forcibly release it by deleting all lock nodes.
 
         :returns: True if the lock was cleared, or False if it
                   is no longer valid.
@@ -344,17 +343,21 @@ class ZkLock(_LockBase):
 
     Example::
 
-        from zktools.connection import ZkConnection
+        from zc.zk import ZooKeeper
         from zktools.locking import ZkLock
 
         # Create a connection and a lock
-        conn = ZkConnection()
+        conn = ZooKeeper()
         my_lock = ZkLock(conn, "my_lock_name")
 
         my_lock.acquire() # wait to acquire lock
         # do something with the lock
 
         my_lock.release() # release our lock
+
+        # Or, using the context manager
+        with my_lock:
+            # do something with the lock
 
     """
     def acquire(self, timeout=None, revoke=False):
@@ -381,7 +384,7 @@ class ZkLock(_LockBase):
 class ZkReadLock(_LockBase):
     """Shared Zookeeper Read Lock
 
-    A read-lock is considered succesful if there are no active write
+    A read-lock is considered successful if there are no active write
     locks.
 
     This class takes the same initialization parameters as
@@ -412,7 +415,7 @@ class ZkReadLock(_LockBase):
 class ZkWriteLock(_LockBase):
     """Shared Zookeeper Write Lock
 
-    A write-lock is only succesful if there are no read or write locks
+    A write-lock is only successful if there are no read or write locks
     active.
 
     This class takes the same initialization parameters as
@@ -494,8 +497,7 @@ def lock_cli():
                         "show"))
         return
 
-    conn = ZkConnection(options.host)
-    conn.connect()
+    conn = ZooKeeper(options.host)
     if command == 'list':
         children = conn.get_children(options.lock_root)
 
@@ -514,12 +516,12 @@ def lock_cli():
             puts(columns([child, col1], [status, col2]))
     elif command == 'remove':
         if len(args) < 2:
-            puts(colored.red("You ust specify a node to remove."))
+            puts(colored.red("You must specify a node to remove."))
             return
         conn.delete(options.lock_root + '/' + args[1])
     elif command == 'show':
         if len(args) < 2:
-            puts(colored.red("You ust specify a node to show."))
+            puts(colored.red("You must specify a node to show."))
             return
         children = conn.get_children(options.lock_root + '/' + args[1])
 

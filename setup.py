@@ -12,13 +12,13 @@ with open(os.path.join(here, 'CHANGES.rst')) as f:
 
 reqs = [
     "clint>=0.3.0",
-    "blinker>=1.2",
+    "zc.zk>=0.7.0"
 ]
 
 on_rtd = os.environ.get('READTHEDOCS', None) == 'True'
 if not on_rtd:
     reqs.extend([
-        "zkpython>=0.4",
+        "zc-zookeeper-static>=3.3.4.0",
     ])
 
 setup(

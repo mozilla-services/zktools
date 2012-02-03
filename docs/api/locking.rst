@@ -11,7 +11,7 @@ Constants
 
 .. data:: IMMEDIATE
     
-    Flag used to declare that revokation should occur immediately. Other
+    Flag used to declare that revocation should occur immediately. Other
     lock-holders will not be given time to release their lock.
 
 Lock Class
