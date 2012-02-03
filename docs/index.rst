@@ -29,7 +29,8 @@ Reference material includes documentation for every `zktools` API.
 Source Code
 ===========
 
-All source code is available on `github under zktools <https://github.com/mozilla-services/zktools>`_.
+All source code is available on `github under zktools
+ <https://github.com/mozilla-services/zktools>`_.
 
 Indices and tables
 ==================
