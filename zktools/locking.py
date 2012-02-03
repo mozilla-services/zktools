@@ -59,19 +59,6 @@ IMMEDIATE = object()
 log = logging.getLogger(__name__)
 
 
-class CtxManager(object):
-    """A lock context manager"""
-    def __init__(self, lock_object):
-        self._lock_object = lock_object
-
-    def __enter__(self):
-        return None  # No useful object will be supplied for 'as'
-
-    def __exit__(self, exc_type, exc_value, traceback):
-        self._lock_object.release()
-        return None  # Return a non-true value to propagate exc
-
-
 class _LockBase(object):
     """Base lock implementation for subclasses"""
     def __init__(self, connection, lock_name, lock_root='/ZktoolsLocks',
@@ -92,6 +79,7 @@ class _LockBase(object):
         self._lock_root = lock_root
         self._locks = threading.local()
         self._locks.revoked = []
+        self._locks.lock_args = ([], {})
         self._log_debug = logging.DEBUG >= log.getEffectiveLevel()
         if logfile:
             zookeeper.set_log_stream(open(logfile))
@@ -237,7 +225,19 @@ class _LockBase(object):
             cv.wait(wait_for)
             first_run = False
         self._locks.lock_node = znode
-        return CtxManager(self)
+        return True
+
+    def __call__(self, *args, **kwargs):
+        self._locks.lock_args = (args, kwargs)
+        return self
+
+    def __enter__(self):
+        args, kwargs = getattr(self._locks, 'lock_args', ([], {}))
+        self.acquire(*args, **kwargs)
+
+    def __exit__(self, exc_type, exc_value, traceback):
+        self._locks.lock_args = ([], {})
+        self.release()
 
     def release(self):
         """Release a lock
@@ -354,6 +354,10 @@ class ZkLock(_LockBase):
         # do something with the lock
 
         my_lock.release() # release our lock
+
+        # Or, using the context manager
+        with my_lock:
+            # do something with the lock
 
     """
     def acquire(self, timeout=None, revoke=False):
