@@ -8,7 +8,7 @@ from nose.tools import eq_
 from zktools.tests import TestBase
 
 
-class TestConfig(TestBase):
+class TestNode(TestBase):
     def makeOne(self, *args, **kwargs):
         from zktools.node import ZkNode
         return ZkNode(self.conn, *args, **kwargs)
