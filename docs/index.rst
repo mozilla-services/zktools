@@ -8,7 +8,7 @@ failure.
 
 Features:
 
-* :mod:`Locks <zktools.locking>` - Support for non-blocking acquire, shared
+* :mod:`Locks <zktools.lock>` - Support for non-blocking acquire, shared
   read/write locks, and modeled on Python's
   Lock objects that also includes `Revocable Shared Locks with Freaking 
   Laser Beams` described in the `Zookeeper Recipes`_.
