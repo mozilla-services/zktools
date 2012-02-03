@@ -17,7 +17,7 @@ import UserDict
 
 import zookeeper
 
-ZOO_OPEN_ACL_UNSAFE = {"perms": 0x1f, "scheme": "world", "id": "anyone"}
+ZOO_OPEN_ACL_UNSAFE = dict(perms=zookeeper.PERM_ALL, scheme='world', id='anyone')
 
 
 CONVERSIONS = {
@@ -288,7 +288,7 @@ class ZkNodeDict(UserDict.DictMixin):
 
         # Do our initial load of the main node
         if not zk.exists(path):
-            zk.create_recursive(path, '', permission)
+            zk.create_recursive(path, '', [permission])
 
         @zk.children(path)
         def child_watcher(children):
