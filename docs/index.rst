@@ -48,11 +48,5 @@ Authors
 
 ``zktools`` is made available by the `Mozilla Foundation`.
 
-Source
-======
-
-Source code can be found on `the github zktools repository 
-<https://github.com/mozilla-services/zktools>`_.
-
 .. _Apache Zookeeper: http://zookeeper.apache.org/
 .. _Zookeeper Recipes: http://zookeeper.apache.org/doc/current/recipes.html#sc_recoverableSharedLocks
