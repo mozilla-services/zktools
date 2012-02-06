@@ -4,7 +4,7 @@
 """Zookeeper Nodes
 
 This module provides a :class:`ZkNode` and a :class:`ZkNodeDict` object which
-can either a single node, or a tree of nodes from Zookeeper.
+can either represent a single node, or a tree of nodes from Zookeeper.
 
 """
 import datetime
