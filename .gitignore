@@ -24,5 +24,6 @@ bin/
 lib/
 include/
 zookeeper/
+zookeeper.out
 .idea/
 distribute-*.tar.gz
