@@ -1,5 +1,8 @@
+APPNAME = zktools
 HERE = $(shell pwd)
 BIN = $(HERE)/bin
+NOSE = $(BIN)/nosetests -s --with-xunit
+PYTHON = $(BIN)/python
 ZOOKEEPER = $(BIN)/zookeeper
 
 .PHONY: zookeeper
@@ -13,3 +16,18 @@ $(ZOOKEEPER):
 	cp zoo.cfg bin/zookeeper/conf/
 
 zookeeper: 	$(ZOOKEEPER)
+
+all: build
+
+$(BIN)/python:
+	virtualenv-2.6 --no-site-packages --distribute .
+
+build: $(BIN)/python
+	$(PYTHON) setup.py develop
+	$(BIN)/pip install nose
+	$(BIN)/pip install Mock
+
+test:
+	$(BIN)/zookeeper/bin/zkServer.sh start $(HERE)/zoo.cfg
+	$(NOSE) --with-coverage --cover-package=$(APPNAME) --cover-inclusive $(APPNAME)
+	$(BIN)/zookeeper/bin/zkServer.sh stop $(HERE)/zoo.cfg

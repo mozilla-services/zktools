@@ -23,5 +23,6 @@ docs/_build
 bin/
 lib/
 include/
+zookeeper/
 .idea/
 distribute-*.tar.gz
