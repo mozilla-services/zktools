@@ -1,6 +1,16 @@
 Changelog
 =========
 
+0.3 (unreleased)
+----------------
+
+Changes
+*******
+
+- Use the Zookeeper-provided mtime of a node as the last_modified
+  attribute, instead of client specific time.time()
+
+
 0.2.1 (02/16/2012)
 ------------------
 
