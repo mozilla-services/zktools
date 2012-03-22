@@ -12,8 +12,8 @@ It currently provides:
   in Zookeeper nodes.
 * ``Locks`` - A Zookeeper lock with support for
   non-blocking acquire, modeled on Python's Lock objects that also includes a
-  `Revocable Shared Locks with Freaking Laser Beams` described in the 
-  `Zookeeper Recipe's 
+  `Revocable Shared Locks with Freaking Laser Beams` described in the
+  `Zookeeper Recipe's
   <http://zookeeper.apache.org/doc/current/recipes.html#sc_recoverableSharedLocks>`_.
 
 See `the full docs`_ for more  information.
