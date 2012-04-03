@@ -27,13 +27,17 @@ class TestNode(TestBase):
         n2 = self.makeOne('/zkTestNode')
 
         eq_(n1.value, n2.value)
+        eq_(n1.last_modified, n2.last_modified)
 
+        old_modified = n1.last_modified
         n1.value = 942
 
         # It can take a fraction of a second on some machines on occasion
         # for the other value to update
         time.sleep(0.1)
         eq_(n1.value, n2.value)
+        eq_(n1.last_modified, n2.last_modified)
+        self.assertTrue(n1.last_modified > old_modified)
 
     def testJsonValue(self):
         n1 = self.makeOne('/zkTestNode', use_json=True)

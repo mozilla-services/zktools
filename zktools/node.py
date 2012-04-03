@@ -11,7 +11,6 @@ import datetime
 import decimal
 import json
 import re
-import time
 import threading
 import UserDict
 
@@ -146,7 +145,8 @@ class ZkNode(object):
 
         The last time a :class:`ZkNode` has been modified either by
         the user or due to a Zookeeper update is recorded as the
-        :obj:`ZkNode.last_modified` attribute.
+        :obj:`ZkNode.last_modified` attribute, as a long in
+            milliseconds from epoch.
 
         :param connection: Zookeeper connection object
         :type connection: zc.zk Zookeeper instance
@@ -168,7 +168,6 @@ class ZkNode(object):
         self._use_json = use_json
         self._value = None
         self._reload_data = False
-        self.last_modified = time.time()
 
         with self._cv:
             if not connection.exists(path, self._created_watcher):
@@ -191,9 +190,9 @@ class ZkNode(object):
         """Watch a node for updates"""
         with self._cv:
             if type == zookeeper.CHANGED_EVENT:
-                data = self._zk.get(self._path, self._node_watcher)[0]
-                self._value = _load_value(data, use_json=self._use_json)
-                self.last_modified = time.time()
+                data = self._zk.get(self._path, self._node_watcher)
+                self.last_modified = data[1][u'mtime']
+                self._value = _load_value(data[0], use_json=self._use_json)
             elif type in (zookeeper.EXPIRED_SESSION_STATE,
                           zookeeper.AUTH_FAILED_STATE):
                 self._reload_data = True
@@ -202,8 +201,9 @@ class ZkNode(object):
     def _load(self):
         """Load data from the node, and coerce as necessary"""
         with self._cv:
-            data = self._zk.get(self._path, self._node_watcher)[0]
-            self._value = _load_value(data, use_json=self._use_json)
+            data = self._zk.get(self._path, self._node_watcher)
+            self.last_modified = data[1][u'mtime']
+            self._value = _load_value(data[0], use_json=self._use_json)
 
     @property
     def value(self):
