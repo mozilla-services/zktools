@@ -9,6 +9,18 @@ Changes
 
 - Use the Zookeeper-provided mtime of a node as the last_modified
   attribute, instead of client specific time.time()
+- Use GUID from new Zookeeper recipe to handle connection loss which
+  still results in a created node.
+- Add safe-call to ensure that commands run reliably in the face of a
+  connection loss exception during their call, and have lock code run
+  in a separate thread to ensure it doesn't deadlock the ZK event
+  thread.
+
+Bugfixes
+********
+
+- Fix ZkNode issues with dead-locks due to having locking code inside
+  watch callbacks.
 
 
 0.2.1 (02/16/2012)
