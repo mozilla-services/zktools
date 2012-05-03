@@ -138,5 +138,5 @@ class TestNodeDict(TestBase):
         n._cv.clear()
         self.conn.delete('/zkTestNode/testval')
         n._cv.wait()
-
+        time.sleep(0.1)
         eq_(n, {})

@@ -1,3 +1,4 @@
+import time
 import threading
 
 from nose.tools import eq_
@@ -112,8 +113,8 @@ class TestSharedLocks(TestLocking):
 
         def reader():
             with r1:
-                ev.set()
                 vals.append(1)
+                ev.set()
                 val = 0
                 while not r1.revoked:
                     val += 1
@@ -126,6 +127,8 @@ class TestSharedLocks(TestLocking):
         writer = threading.Thread(target=writer)
         reader.start()
         ev.wait()
+        # Wait a fraction of a second for the update
+        time.sleep(0.1)
         eq_(vals, [1])
         writer.start()
         reader.join()
@@ -140,8 +143,8 @@ class TestSharedLocks(TestLocking):
 
         def reader():
             with r1:
-                ev.set()
                 vals.append(1)
+                ev.set()
                 val = 0
                 while not r1.revoked:
                     val += 1
@@ -169,8 +172,8 @@ class TestSharedLocks(TestLocking):
 
         def reader():
             with r1:
-                ev.set()
                 vals.append(1)
+                ev.set()
                 val = 0
                 while not r1.revoked:
                     val += 1
@@ -202,8 +205,8 @@ class TestSharedLocks(TestLocking):
 
         def readera():
             with r1:
-                ev.set()
                 vals.append(1)
+                ev.set()
                 val = 0
                 while not r1.revoked:
                     val += 1

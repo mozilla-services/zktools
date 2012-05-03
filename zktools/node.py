@@ -41,7 +41,14 @@ def _load_value(value, use_json=False):
     """Convert a saved value to the best Python match"""
     for regex, convert in CONVERSIONS.iteritems():
         if regex.match(value):
-            return convert(value)
+            try:
+                return convert(value)
+            except:
+                # WTF: A _strptime error occurs here on occasion during
+                # testing. Catching it and converting again works... if
+                # someone could figure out why, that'd be awesome, until
+                # then, this horribly hacky fix actually works.
+                return convert(value)
     if use_json and JSON_REGEX.match(value):
         try:
             return json.loads(value)
@@ -277,7 +284,11 @@ class ZkNodeDict(UserDict.DictMixin):
         @zk.children(path)
         def child_watcher(children):
             old_set = set(nodes.keys())
-            new_set = set(children)
+            try:
+                new_set = set(children)
+            except AttributeError:
+                # Called if there is no children data to iter over
+                return
             for name in new_set - old_set:
                 if name in nodes:
                     continue
