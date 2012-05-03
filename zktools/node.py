@@ -220,8 +220,8 @@ class ZkNode(object):
         :type value: Any str'able object
 
         """
-        self._zk.set(self._path,
-                     _save_value(value, use_json=self._use_json))
+        self._value = val = _save_value(value, use_json=self._use_json)
+        self._zk.set(self._path, val)
 
     @property
     def connected(self):
