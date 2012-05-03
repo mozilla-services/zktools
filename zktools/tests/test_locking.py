@@ -84,8 +84,11 @@ class TestSharedLocks(TestLocking):
 
         vals = []
 
+        cv = threading.Event()
+
         def reader():
             with r2:
+                cv.set()
                 vals.append('r')
 
         def writer():
@@ -97,6 +100,8 @@ class TestSharedLocks(TestLocking):
         r1.acquire()
         eq_(r1.has_lock(), True)
         read2.start()
+        # Make sure read2 starts before the write1
+        cv.wait()
         write1.start()
         read2.join()
         eq_(vals, ['r'])
