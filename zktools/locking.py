@@ -49,9 +49,12 @@ from optparse import OptionParser
 from clint.textui import colored
 from clint.textui import columns
 from clint.textui import puts
+from zc.zk import ZooKeeper
 import zookeeper
 
-from zc.zk import ZooKeeper
+from zktools.util import safe_call
+from zktools.util import safe_create_ephemeral_sequence
+from zktools.util import threaded
 
 ZOO_OPEN_ACL_UNSAFE = {"perms": 0x1f, "scheme": "world", "id": "anyone"}
 IMMEDIATE = object()
@@ -90,20 +93,20 @@ class _LockBase(object):
 
     def _ensure_lock_dir(self):
         # Ensure our lock dir exists
-        if self._zk.exists(self._locknode):
+        if safe_call(self._zk, 'exists', self._locknode):
             return
 
         try:
-            self._zk.create(self._lock_root, "zktools ZLock dir",
-                           [ZOO_OPEN_ACL_UNSAFE], 0)
+            safe_call(self._zk, 'create', self._lock_root,
+                      "zktools ZLock dir", [ZOO_OPEN_ACL_UNSAFE], 0)
         except zookeeper.NodeExistsException:
             if self._log_debug:
                 log.debug("Lock node in Zookeeper already created")
 
         # Try and create our locking node
         try:
-            self._zk.create(self._locknode, "lock", [ZOO_OPEN_ACL_UNSAFE],
-                            0)
+            safe_call(self._zk, 'create', self._locknode, "lock",
+                      [ZOO_OPEN_ACL_UNSAFE], 0)
         except zookeeper.NodeExistsException:
             # Ok if this exists already
             pass
@@ -134,25 +137,29 @@ class _LockBase(object):
         revoke_lock = self._locks.revoked
 
         # Create a lock node
-        znode = self._zk.create(self._locknode + node_name, "0",
-                               [ZOO_OPEN_ACL_UNSAFE],
-                               zookeeper.EPHEMERAL | zookeeper.SEQUENCE)
+        znode = safe_create_ephemeral_sequence(
+            self._zk, self._locknode + node_name, "0", [ZOO_OPEN_ACL_UNSAFE])
 
         def revoke_watcher(handle, type, state, path):
             # This method must be in closure scope to ensure that
             # it can append to the thread it is called from
             # to indicate if this particular thread's lock was
             # revoked or removed
-            if type == zookeeper.CHANGED_EVENT:
-                data = self._zk.get(path, revoke_watcher)[0]
-                if data == 'unlock':
+            @threaded
+            def handle_events():
+                # Run separately in a thread because safe_call can block the
+                # ZK event thread which would be very bad
+                if type == zookeeper.CHANGED_EVENT:
+                    data = safe_call(self._zk, 'get', path, revoke_watcher)[0]
+                    if data == 'unlock':
+                        revoke_lock.append(True)
+                elif type == zookeeper.DELETED_EVENT or \
+                     state == zookeeper.EXPIRED_SESSION_STATE:
+                    # Trigger if node was deleted
                     revoke_lock.append(True)
-            elif type == zookeeper.DELETED_EVENT or \
-                 state == zookeeper.EXPIRED_SESSION_STATE:
-                # Trigger if node was deleted
-                revoke_lock.append(True)
+            handle_events()
 
-        data = self._zk.get(znode, revoke_watcher)[0]
+        data = safe_call(self._zk, 'get', znode, revoke_watcher)[0]
         if data == 'unlock':
             revoke_lock.append(True)
         keyname = znode[znode.rfind('/') + 1:]
@@ -172,22 +179,22 @@ class _LockBase(object):
             if not first_run:
                 if timeout is not None and time.time() - lock_start > timeout:
                     try:
-                        self._zk.delete(znode)
+                        safe_call(self._zk, 'delete', znode)
                     except zookeeper.NoNodeException:
                         pass
                     return False
 
             # Get all the children of the node
-            children = self._zk.get_children(self._locknode)
+            children = safe_call(self._zk, 'get_children', self._locknode)
             children.sort(key=lambda val: val[val.rfind('-') + 1:])
 
             if len(children) == 0 or not keyname in children:
                 # Disconnects or other errors can cause this
-                znode = self._zk.create(
-                    self._locknode + node_name, "0", [ZOO_OPEN_ACL_UNSAFE],
-                    zookeeper.EPHEMERAL | zookeeper.SEQUENCE)
+                znode = safe_create_ephemeral_sequence(
+                    self._zk, self._locknode + node_name, "0",
+                    [ZOO_OPEN_ACL_UNSAFE])
                 keyname = znode[znode.rfind('/') + 1:]
-                data = self._zk.get(znode, revoke_watcher)[0]
+                data = safe_call(self._zk, 'get', znode, revoke_watcher)[0]
                 if data == 'unlock':
                     revoke_lock.append(True)
                 continue
@@ -199,7 +206,8 @@ class _LockBase(object):
                 # Remove all prior nodes
                 for node in blocking_nodes:
                     try:
-                        self._zk.delete(self._locknode + '/' + node)
+                        safe_call(self._zk, 'delete',
+                                  self._locknode + '/' + node)
                     except zookeeper.NoNodeException:
                         pass
                 continue  # Now try again
@@ -207,11 +215,13 @@ class _LockBase(object):
                 # Ask all prior blocking nodes to release
                 for node in blocking_nodes:
                     try:
-                        self._zk.set(self._locknode + '/' + node, "unlock")
+                        safe_call(self._zk, 'set',
+                                  self._locknode + '/' + node, "unlock")
                     except zookeeper.NoNodeException:
                         pass
             prior_blocking_node = self._locknode + '/' + blocking_nodes[-1]
-            exists = self._zk.exists(prior_blocking_node, lock_watcher)
+            exists = safe_call(self._zk, 'exists', prior_blocking_node,
+                               lock_watcher)
             if not exists:
                 # The node disappeared? Rinse and repeat.
                 continue
@@ -454,8 +464,7 @@ def has_read_lock(keyname, children):
 
     """
     prior_nodes = children[:children.index(keyname)]
-    prior_write_nodes = [x for x in prior_nodes if \
-                         x.startswith('write-')]
+    prior_write_nodes = [x for x in prior_nodes if '-write-' in x]
     if not prior_write_nodes:
         return True, None
     else:
