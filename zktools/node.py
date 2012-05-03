@@ -169,41 +169,28 @@ class ZkNode(object):
         self._value = None
         self._reload_data = False
 
-        with self._cv:
-            if not connection.exists(path, self._created_watcher):
-                self._zk.create(self._path,
-                                _save_value(default, use_json=use_json),
-                                [permission], create_mode)
-
-                # Wait for the node to actually be created
-                self._cv.wait()
-            self._load()
-            self.children = connection.children(path)
-
-    def _created_watcher(self, handle, type, state, path):
-        """Watch for our node to be created before continuing"""
-        with self._cv:
-            if type == zookeeper.CREATED_EVENT:
-                self._cv.notify_all()
+        if not connection.exists(path):
+            self._zk.create(self._path,
+                            _save_value(default, use_json=use_json),
+                            [permission], create_mode)
+        self._load()
+        self.children = connection.children(path)
 
     def _node_watcher(self, handle, type, state, path):
         """Watch a node for updates"""
-        with self._cv:
-            if type == zookeeper.CHANGED_EVENT:
-                data = self._zk.get(self._path, self._node_watcher)
-                self.last_modified = data[1][u'mtime']
-                self._value = _load_value(data[0], use_json=self._use_json)
-            elif type in (zookeeper.EXPIRED_SESSION_STATE,
-                          zookeeper.AUTH_FAILED_STATE):
-                self._reload_data = True
-            self._cv.notify_all()
-
-    def _load(self):
-        """Load data from the node, and coerce as necessary"""
-        with self._cv:
+        if type == zookeeper.CHANGED_EVENT:
             data = self._zk.get(self._path, self._node_watcher)
             self.last_modified = data[1][u'mtime']
             self._value = _load_value(data[0], use_json=self._use_json)
+        elif type in (zookeeper.EXPIRED_SESSION_STATE,
+                      zookeeper.AUTH_FAILED_STATE):
+            self._reload_data = True
+
+    def _load(self):
+        """Load data from the node, and coerce as necessary"""
+        data = self._zk.get(self._path, self._node_watcher)
+        self.last_modified = data[1][u'mtime']
+        self._value = _load_value(data[0], use_json=self._use_json)
 
     @property
     def value(self):
@@ -226,12 +213,8 @@ class ZkNode(object):
         :type value: Any str'able object
 
         """
-        with self._cv:
-            self._zk.set(
-                self._path, _save_value(value, use_json=self._use_json))
-
-            # Now wait to see that it triggered our change event
-            self._cv.wait()
+        self._zk.set(self._path,
+                     _save_value(value, use_json=self._use_json))
 
     @property
     def connected(self):
