@@ -41,14 +41,14 @@ def _load_value(value, use_json=False):
     """Convert a saved value to the best Python match"""
     for regex, convert in CONVERSIONS.iteritems():
         if regex.match(value):
-            try:
-                return convert(value)
-            except:
-                # WTF: A _strptime error occurs here on occasion during
-                # testing. Catching it and converting again works... if
-                # someone could figure out why, that'd be awesome, until
-                # then, this horribly hacky fix actually works.
-                return convert(value)
+            # Sad fix for http://bugs.python.org/issue7980
+            while 1:
+                try:
+                    return convert(value)
+                except AttributeError as exc:
+                    if str(exc) == '_strptime':
+                        continue
+                    raise
     if use_json and JSON_REGEX.match(value):
         try:
             return json.loads(value)
