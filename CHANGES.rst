@@ -22,6 +22,12 @@ Bugfixes
 - Fix ZkNode issues with dead-locks due to having locking code inside
   watch callbacks.
 
+Backward Incompatibilities
+**************************
+
+- Removed ZkNodeDict which establishes a questionable amount of watches on
+  the server. Setting too many watches has multiple drawbacks, larger values
+  should be stored as JSON in a single node.
 
 0.2.1 (02/16/2012)
 ------------------

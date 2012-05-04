@@ -3,8 +3,9 @@
 # You can obtain one at http://mozilla.org/MPL/2.0/.
 """Zookeeper Nodes
 
-This module provides a :class:`ZkNode` and a :class:`ZkNodeDict` object which
-can either represent a single node, or a tree of nodes from Zookeeper.
+This module provides a :class:`ZkNode` object which can represent a single
+node from Zookeeper. It can reflect a single value, or a JSON serialized
+value.
 
 """
 import datetime
@@ -12,7 +13,6 @@ import decimal
 import json
 import re
 import threading
-import UserDict
 
 import zookeeper
 
@@ -45,14 +45,14 @@ assert datetime.datetime.strptime('2004-02-03T12:10:32.4Z',
 
 def _load_value(value, use_json=False):
     """Convert a saved value to the best Python match"""
-    for regex, convert in CONVERSIONS.iteritems():
-        if regex.match(value):
-            return convert(value)
     if use_json and JSON_REGEX.match(value):
         try:
             return json.loads(value)
         except ValueError:
             return value
+    for regex, convert in CONVERSIONS.iteritems():
+        if regex.match(value):
+            return convert(value)
     return value
 
 
@@ -180,7 +180,6 @@ class ZkNode(object):
                             _save_value(default, use_json=use_json),
                             [permission], create_mode)
         self._load()
-        self.children = connection.children(path)
 
     def _node_watcher(self, handle, type, state, path):
         """Watch a node for updates"""
@@ -226,110 +225,3 @@ class ZkNode(object):
     def connected(self):
         """Indicate whether a connection to Zookeeper exists"""
         return self._zk.connected
-
-
-class ZkNodeDict(UserDict.DictMixin):
-    """Zookeeper Node Dict
-
-    This object loads a shallow node tree from Zookeeper and
-    represents it as a dict. Each dict name/value represents
-    a node under the parent path, and updates in Zookeeper to
-    remove/add nodes or change values are immediately represented
-    in the :class:`ZkNodeDict` object.
-
-    The full range of Python dict operations are available with
-    the :class:`ZkNodeDict`.
-
-    Example::
-
-        from zc.zk import ZooKeeper
-        from zktools.node import ZkNode
-
-        conn = ZooKeeper()
-        nodedict = ZkNodeDict(conn, '/some/config/nodetree')
-
-        # see the keys
-        print nodedict.keys()
-
-        # set a value
-        nodedict['my_key'] = 23
-
-        # delete a value
-        del nodedict['my_key']
-
-    """
-    def __init__(self, connection, path, permission=ZOO_OPEN_ACL_UNSAFE):
-        """Create a ZkNodeDict object
-
-        :param connection: Zookeeper connection object
-        :type connection: zc.zk Zookeeper instance
-        :param path: Path to the Zookeeper node
-        :type path: str
-        :param permission: Node permission to use if the node is being
-                           created.
-        :type permission: dict
-
-        """
-        self._zk = zk = connection
-        self._path = path
-        self._nodes = nodes = {}
-        self._cv = cv = threading.Event()
-        self._permission = permission
-
-        # Do our initial load of the main node
-        if not zk.exists(path):
-            zk.create_recursive(path, '', [permission])
-
-        @zk.children(path)
-        def child_watcher(children):
-            old_set = set(nodes.keys())
-            try:
-                new_set = set(children)
-            except AttributeError:
-                # Called if there is no children data to iter over
-                return
-            for name in new_set - old_set:
-                if name in nodes:
-                    continue
-                nodes[name] = ZkNode(zk, '%s/%s' % (path, name),
-                                     permission=permission)
-            for name in old_set - new_set:
-                del nodes[name]
-            cv.set()
-
-        # We hold a reference to our function to ensure it is still
-        # tracked since the decorator above uses a weak-ref
-        self._child_watch = child_watcher
-
-    def keys(self):
-        """Return the current node keys"""
-        return self._nodes.keys()
-
-    def __getitem__(self, name):
-        """Retrieve the value from the underlying node"""
-        if name not in self._nodes:
-            raise KeyError
-        else:
-            return self._nodes[name].value
-
-    def __setitem__(self, name, value):
-        """Set an item in the node tree"""
-        if not isinstance(name, str):
-            raise Exception("Key names must be strings.")
-        if name in self._nodes:
-            self._nodes[name].value = value
-        else:
-            self._nodes[name] = ZkNode(self._zk,
-                '%s/%s' % (self._path, name), default=value,
-                permission=self._permission)
-
-    def __delitem__(self, name):
-        """Delete an item in Zookeeper, and wait for the
-        delete notification to remove it from the ZkNodeDict"""
-        self._cv.clear()
-        if name not in self._nodes:
-            raise KeyError
-        else:
-            self._zk.delete('%s/%s' % (self._path, name))
-            # Wait for the delete to trigger
-            self._cv.wait()
