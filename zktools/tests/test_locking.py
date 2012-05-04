@@ -1,4 +1,3 @@
-import time
 import threading
 
 from nose.tools import eq_
@@ -27,16 +26,22 @@ class TestLocking(TestBase):
         lock2 = self.makeOne('zkLockTest')
 
         vals = []
+        pv = threading.Event()
+        al = threading.Event()
 
         def run():
+            pv.set()
             with lock2:
                 vals.append(2)
+                al.set()
         waiter = threading.Thread(target=run)
         lock1.acquire()
         waiter.start()
+        pv.wait()
         eq_(vals, [])
         lock1.release()
         waiter.join()
+        al.wait()
         eq_(vals, [2])
 
     def testLockRevoked(self):
@@ -85,6 +90,7 @@ class TestSharedLocks(TestLocking):
         vals = []
 
         cv = threading.Event()
+        wv = threading.Event()
 
         def reader():
             with r2:
@@ -94,6 +100,7 @@ class TestSharedLocks(TestLocking):
         def writer():
             with w1:
                 vals.append('w')
+            wv.set()
 
         read2 = threading.Thread(target=reader)
         write1 = threading.Thread(target=writer)
@@ -107,6 +114,7 @@ class TestSharedLocks(TestLocking):
         eq_(vals, ['r'])
         r1.release()
         write1.join()
+        wv.wait()
         eq_(vals, ['r', 'w'])
 
     def testRevoked(self):
@@ -114,6 +122,7 @@ class TestSharedLocks(TestLocking):
         w1 = self.makeReadLock('zkLockTest')
         r1 = self.makeWriteLock('zkLockTest')
         ev = threading.Event()
+        wv = threading.Event()
         vals = []
 
         def reader():
@@ -127,23 +136,24 @@ class TestSharedLocks(TestLocking):
         def writer():
             with w1(revoke=IMMEDIATE):
                 vals.append(2)
+                wv.set()
 
         reader = threading.Thread(target=reader)
         writer = threading.Thread(target=writer)
         reader.start()
         ev.wait()
-        # Wait a fraction of a second for the update
-        time.sleep(0.1)
         eq_(vals, [1])
         writer.start()
         reader.join()
         writer.join()
+        wv.wait()
         eq_(vals, [1, 2])
 
     def testGentleRevoke(self):
         w1 = self.makeReadLock('zkLockTest')
         r1 = self.makeWriteLock('zkLockTest')
         ev = threading.Event()
+        wv = threading.Event()
         vals = []
 
         def reader():
@@ -157,6 +167,7 @@ class TestSharedLocks(TestLocking):
         def writer():
             with w1(revoke=True):
                 vals.append(2)
+                wv.set()
 
         reader = threading.Thread(target=reader)
         writer = threading.Thread(target=writer)
@@ -166,6 +177,7 @@ class TestSharedLocks(TestLocking):
         writer.start()
         reader.join()
         writer.join()
+        wv.wait()
         eq_(vals, [1, 2])
 
     def testTimeOut(self):
@@ -174,6 +186,7 @@ class TestSharedLocks(TestLocking):
 
         vals = []
         ev = threading.Event()
+        wv = threading.Event()
 
         def reader():
             with r1:
@@ -190,6 +203,7 @@ class TestSharedLocks(TestLocking):
             vals.append(3)
             with w1(revoke=True):
                 vals.append(4)
+                wv.set()
 
         reader = threading.Thread(target=reader)
         writer = threading.Thread(target=writer)
@@ -199,6 +213,7 @@ class TestSharedLocks(TestLocking):
         writer.start()
         reader.join()
         writer.join()
+        wv.wait()
         eq_(vals, [1, 3, 4])
 
     def testClearing(self):
