@@ -10,7 +10,17 @@ import zookeeper
 
 
 def safe_call(zk, func, *args, **kwargs):
-    """Safely call a function while handling connection loss"""
+    """Safely call a function while handling connection loss
+
+    .. note::
+
+        This function merely retries the query until an active
+        Zookeeper session is available that returns without throwing
+        a ConnectionLoss Exception. When creating a node, this could
+        result in a NodeAlreadyExists exception because the create
+        ran twice.
+
+    """
     while 1:
         try:
             return getattr(zk, func)(*args, **kwargs)
@@ -62,17 +72,18 @@ def safe_create_ephemeral_sequence(zk, name, data, acl):
 
 
 def threaded(func):
-    """threaded(func)
-        function decorator, intended to make "func" run in a separate
-        thread (asynchronously).
-        Returns the created Thread object
+    """Decorator to run a function in a separate thread
 
-        E.g.:
-        @run_async
+    :param func: Function to run in the other thread
+    :returns: :class:`Thread` reference
+
+    Example::
+
+        @threaded
         def task1():
             do_something
 
-        @run_async
+        @threaded
         def task2():
             do_something_too
 
