@@ -1,0 +1,20 @@
+language: python
+python:
+    - "2.6"
+
+branches:
+  only:
+    - master
+
+notifications:
+  email:
+    - bbangert@mozilla.com
+
+before_install:
+    - sudo apt-get -q update >/dev/null 2>&1
+    - sudo apt-get -q install libevent-dev libpcre3-dev libzookeeper-dev >/dev/null 2>&1
+
+install:
+    - make build
+
+script: make test
