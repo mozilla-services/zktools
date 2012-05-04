@@ -63,5 +63,5 @@ build: $(BIN)/python zookeeper
 
 test:
 	$(BIN)/zookeeper/bin/zkServer.sh start $(HERE)/zoo.cfg
-	$(NOSE) --with-coverage --cover-package=$(APPNAME) --cover-inclusive $(APPNAME)
+	$(NOSE) -v --with-coverage --cover-package=$(APPNAME) --cover-inclusive $(APPNAME)
 	$(BIN)/zookeeper/bin/zkServer.sh stop $(HERE)/zoo.cfg

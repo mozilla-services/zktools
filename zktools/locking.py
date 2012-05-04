@@ -259,7 +259,7 @@ class _LockBase(object):
         """
         self._locks.revoked = []
         try:
-            self._zk.delete(self._locks.lock_node)
+            safe_call(self._zk, 'delete', self._locks.lock_node)
             del self._locks.lock_node
             return True
         except (zookeeper.NoNodeException, AttributeError):
@@ -279,7 +279,7 @@ class _LockBase(object):
         znode = self._locks.lock_node
         keyname = znode[znode.rfind('/') + 1:]
         # Get all the children of the node
-        children = self._zk.get_children(self._locknode)
+        children = safe_call(self._zk, 'get_children', self._locknode)
         children.sort(key=lambda val: val[val.rfind('-') + 1:])
         if keyname not in children:
             return False
@@ -300,10 +300,10 @@ class _LockBase(object):
         :rtype: bool
 
         """
-        children = self._zk.get_children(self._locknode)
+        children = safe_call(self._zk, 'get_children', self._locknode)
         for child in children:
             try:
-                self._zk.delete(self._locknode + '/' + child)
+                safe_call(self._zk, 'delete', self._locknode + '/' + child)
             except zookeeper.NoNodeException:
                 pass
 
@@ -319,13 +319,14 @@ class _LockBase(object):
 
         """
         # Get all the children of the node
-        children = self._zk.get_children(self._locknode)
+        children = safe_call(self._zk, 'get_children', self._locknode)
         if not children:
             return False
 
         for child in children:
             try:
-                self._zk.set(self._locknode + '/' + child, "unlock")
+                safe_call(self._zk, 'set', self._locknode + '/' + child,
+                          "unlock")
             except zookeeper.NoNodeException:
                 pass
         return True
