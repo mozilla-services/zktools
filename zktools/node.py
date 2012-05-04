@@ -36,19 +36,18 @@ CONVERSIONS = {
 
 JSON_REGEX = re.compile(r'^[\{\[].*[\}\]]$')
 
+# Sad fix for http://bugs.python.org/issue7980
+# We import and use strptime here to ensure the whole chain is fully
+# imported before threading is likely to occur which remedies the bug
+assert datetime.datetime.strptime('2004-02-03T12:10:32.4Z',
+                                  '%Y-%m-%dT%H:%M:%S.%fZ')
+
 
 def _load_value(value, use_json=False):
     """Convert a saved value to the best Python match"""
     for regex, convert in CONVERSIONS.iteritems():
         if regex.match(value):
-            # Sad fix for http://bugs.python.org/issue7980
-            while 1:
-                try:
-                    return convert(value)
-                except AttributeError as exc:
-                    if str(exc) == '_strptime':
-                        continue
-                    raise
+            return convert(value)
     if use_json and JSON_REGEX.match(value):
         try:
             return json.loads(value)
