@@ -10,7 +10,3 @@ Node Class
 
 .. autoclass:: ZkNode
     :members: __init__, value, connected
-
-.. autoclass:: ZkNodeDict
-    :members: __init__
-    :inherited-members:
