@@ -86,7 +86,7 @@ class ZkAsyncLock(object):
 
     def __enter__(self):
         self.acquire()
-        self._lock_event.wait()
+        self._lock_event.wait(self._wait_timeout)
 
     def __exit__(self, exc_type, exc_value, traceback):
         self.release()
