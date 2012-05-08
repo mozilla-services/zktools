@@ -68,59 +68,60 @@ def retryable(d):
                  zookeeper.OPERATIONTIMEOUT)
 
 
-class Lock(object):
-    def __init__(self, connection, lock_name, lock_root='/ZktoolsLocks'):
+class ZkAsyncLock(object):
+    def __init__(self, connection, lock_path):
         self._zk = connection
-        self._lock_root = lock_root
-        self._locknode = '/'.join([lock_root, lock_name])
-        self._lock_acquire_event = threading.Event()
-        self._lock_release_event = threading.Event()
-        self._abort_lock = threading.Lock()
+        self._lock_path = lock_path
+        self._lock_event = threading.Event()
         self._acquired = False
-        self._aborted = False
         self._candidate_path = None
+        self._wait_timeout = None
         self.errors = []
+
+        try:
+            safe_call(self._zk, 'create_recursive', self._lock_path,
+                      "zktools ZLock dir", [ZOO_OPEN_ACL_UNSAFE])
+        except zookeeper.NodeExistsException:
+            pass
+
+    def __enter__(self):
+        self.acquire()
+        self._lock_event.wait()
+
+    def __exit__(self, exc_type, exc_value, traceback):
+        self.release()
+        self._lock_event.wait()
+        self._wait_timeout = None
+
+    def wait_for(self, timeout=None):
+        self._wait_timeout = timeout
+        return self
+
+    def wait_for_acquire(self, timeout=None):
+        if not self._node_prefix:
+            raise Exception("Lock acquisition is not in process")
+        self._lock_event.wait(timeout)
+        return self.acquired
 
     @property
     def acquired(self):
         return self._acquired
 
-    @threaded
-    def abort(self):
-        """Aborts a lock acquisition, releases the lock if it was just
-        acquired
-
-        This runs in a separate thread to avoid blocking where it was
-        called.
-
-        """
-        # We use an abort lock here, and inside the notification of lock
-        # acquisition to ensure we aren't in the process of acquiring the
-        # lock while checking to see if it was aborted. This way it was
-        # either aborted before we run here, or we run here to abort it
-        # before the watcher gets to run.
-        self._lock_release_event.clear()
-        self._aborted = True
-
     def release(self):
-        if not self._acquired:
+        if not self.acquired:
             raise Exception("Lock not acquired")
+        self._lock_event.clear()
         self._delete_candidate()
 
     def _delete_candidate(self):
         self._zk.adelete(self._candidate_path, -1, self._delete_callback)
 
-    def _reset(self):
-        self._candidate_path = self._node_prefix = None
-        self._aborted = False
-        self._acquired = False
-        self._lock_acquire_event.clear()
-
     @threaded
     def _delete_callback(self, p, rc):
         if rc in (zookeeper.OK, zookeeper.NONODE):
-            self._reset()
-            self._lock_release_event.set()
+            self._candidate_path = self._node_prefix = None
+            self._acquired = False
+            self._lock_event.set()
         elif retryable(rc):
             time.sleep(0.2)
             return self._delete_candidate()
@@ -128,15 +129,16 @@ class Lock(object):
             self.errors.append((rc, 'Delete callback'))
 
     def acquire(self):
-        if self._lock_acquire_event.is_set():
+        if self.acquired:
             raise Exception("Lock already acquired")
 
-        self._node_prefix = uuid.uuid4().hex + '-'
+        self._node_prefix = uuid.uuid4().hex
         self._create_candidate()
+        self._lock_event.clear()
         return False
 
     def _create_candidate(self):
-        self._zk.create(self._locknode + "/%s-lock-" % self._node_prefix,
+        self._zk.create(self._lock_path + "/%s-lock-" % self._node_prefix,
                         "0", [ZOO_OPEN_ACL_UNSAFE],
                         zookeeper.EPHEMERAL | zookeeper.SEQUENCE,
                         self._candidate_creation)
@@ -147,10 +149,11 @@ class Lock(object):
             self._candidate_path = value
             return self._acquire()
         elif retryable(rc):
-            self._zk.aget_children(self._locknode, None,
+            self._zk.aget_children(self._lock_path, None,
                                    self._check_children_for_prefix)
         else:
             self.errors.append((rc, 'Candidate creation'))
+            self._lock_event.set()
 
     @threaded
     def _check_children_for_prefix(self, p, rc, children):
@@ -158,54 +161,60 @@ class Lock(object):
         was actually created"""
         if rc == zookeeper.OK:
             for child in children:
-                if child.startswith(self._node_prefix):
-                    # Our child was actually created, set our path
-                    # and proceed with acquisition
-                    self._candidate_path = child
+                if child.startswith(self._node_prefix):  # Child was created
+                    self._candidate_path = self._lock_path + '/' + child
                     return self._acquire()
             # No matching child, recreate the candidate
             self._create_candidate()
-        elif self._aborted:
-            # We were aborted, cease and decist
-            self._reset()
-            self._lock_release_event.set()
-        elif retryable(rc):
-            # We include a small sleep here to avoid wacking the CPU with
-            # constant queries
+        elif retryable(rc):  # Small sleep to avoid CPU hit
             time.sleep(0.2)
-            self._zk.aget_children(self._locknode, None,
+            self._zk.aget_children(self._lock_path, None,
                                    self._check_children_for_prefix)
+        else:
+            self.errors.append((rc, 'Check children for prefix'))
+            self._lock_event.set()
 
     def _acquire(self):
-        if self._aborted:
-            return self._delete_candidate()
-        self._zk.aget_children(self._locknode, None,
+        self._zk.aget_children(self._lock_path, None,
                                self._check_candidate_nodes)
 
     @threaded
     def _check_candidate_nodes(self, p, rc, children):
-        if retryable(rc):
-            # A small sleep to avoid spinning the CPU
+        if retryable(rc):  # Small sleep to avoid CPU hit
             time.sleep(0.2)
             return self._acquire()
         elif rc != zookeeper.OK:
             self.errors.append((rc, 'Check candidate nodes'))
             return
 
-        if self._candidate_path not in children:
-            # Not in the list, reset our candidate path and start over
+        candidate_name = self._candidate_path.split('/')[-1]
+        if candidate_name not in children:  # Not in list? start over
             self._candidate_path = None
             return self._create_candidate()
 
         # Sort by sequence, ignore proceeding UUID hex
         children.sort(key=lambda k: k.split('-')[-1])
+        index = children.index(candidate_name)
 
-        index = children.index(self._candidate_path)
+        if index == 0:  # We're first, lock acquired
+            self._acquired = True
+            return self._lock_event.set()
 
-        if index == 0:
-            # We're first, if we were asked to abort, delete this
-            if self._aborted:
-                return self._delete_candidate()
+        # We're not first, watch the next in line
+        prior_node = '/'.join([self._lock_path, children[index - 1]])
+        self._zk.aget(prior_node, self._prior_node_watch,
+                      self._prior_node_exists)
+
+    def _prior_node_exists(self, p, rc, value, stat):
+        if rc == zookeeper.NONODE:
+            # No node? Check candidates again
+            return self._acquire()
+        # Node still exists, wait for the watcher and ignore here
+
+    def _prior_node_watch(self, handle, type, state, path):
+        if type != zookeeper.SESSION_EVENT:
+            # Retrigger our children check
+            self._acquire()
 
 
 class _LockBase(object):
