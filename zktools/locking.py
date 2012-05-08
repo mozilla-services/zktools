@@ -69,6 +69,11 @@ def retryable(d):
 
 
 class ZkAsyncLock(object):
+    """Asynchronous Zookeeper Lock
+
+    This Lock can be established asynchronously in the background.
+
+    """
     def __init__(self, connection, lock_path):
         self._zk = connection
         self._lock_path = lock_path
@@ -126,16 +131,16 @@ class ZkAsyncLock(object):
         self._zk.adelete(self._candidate_path, -1, self._delete_callback)
 
     @threaded
-    def _delete_callback(self, p, rc):
-        if rc in (zookeeper.OK, zookeeper.NONODE):
+    def _delete_callback(self, p, return_code):
+        if return_code in (zookeeper.OK, zookeeper.NONODE):
             self._candidate_path = self._node_prefix = None
             self._acquired = False
             self._lock_event.set()
-        elif retryable(rc):
-            time.sleep(0.2)
+        elif retryable(return_code):
+            time.sleep(0.1)
             return self._delete_candidate()
         else:
-            self.errors.append((rc, 'Delete callback'))
+            self.errors.append((return_code, 'Delete callback'))
 
     def _create_candidate(self):
         self._zk.create(self._lock_path + "/%s-lock-" % self._node_prefix,
@@ -143,35 +148,35 @@ class ZkAsyncLock(object):
                         zookeeper.EPHEMERAL | zookeeper.SEQUENCE,
                         self._candidate_creation)
 
-    def _candidate_creation(self, p, rc, value):
+    def _candidate_creation(self, p, return_code, value):
         """Callback for after the node creation runs"""
-        if rc == zookeeper.OK:
+        if return_code == zookeeper.OK:
             self._candidate_path = value
             return self._acquire()
-        elif retryable(rc):
+        elif retryable(return_code):
             self._zk.aget_children(self._lock_path, None,
                                    self._check_children_for_prefix)
         else:
-            self.errors.append((rc, 'Candidate creation'))
+            self.errors.append((return_code, 'Candidate creation'))
             self._lock_event.set()
 
     @threaded
-    def _check_children_for_prefix(self, p, rc, children):
+    def _check_children_for_prefix(self, p, return_code, children):
         """Checks to see during candidate creation errors if the node
         was actually created"""
-        if rc == zookeeper.OK:
+        if return_code == zookeeper.OK:
             for child in children:
                 if child.startswith(self._node_prefix):  # Child was created
                     self._candidate_path = self._lock_path + '/' + child
                     return self._acquire()
             # No matching child, recreate the candidate
             self._create_candidate()
-        elif retryable(rc):  # Small sleep to avoid CPU hit
-            time.sleep(0.2)
+        elif retryable(return_code):  # Small sleep to avoid CPU hit
+            time.sleep(0.1)
             self._zk.aget_children(self._lock_path, None,
                                    self._check_children_for_prefix)
         else:
-            self.errors.append((rc, 'Check children for prefix'))
+            self.errors.append((return_code, 'Check children for prefix'))
             self._lock_event.set()
 
     def _acquire(self):
@@ -179,12 +184,12 @@ class ZkAsyncLock(object):
                                self._check_candidate_nodes)
 
     @threaded
-    def _check_candidate_nodes(self, p, rc, children):
-        if retryable(rc):  # Small sleep to avoid CPU hit
-            time.sleep(0.2)
+    def _check_candidate_nodes(self, p, return_code, children):
+        if retryable(return_code):  # Small sleep to avoid CPU hit
+            time.sleep(0.1)
             return self._acquire()
-        elif rc != zookeeper.OK:
-            self.errors.append((rc, 'Check candidate nodes'))
+        elif return_code != zookeeper.OK:
+            self.errors.append((return_code, 'Check candidate nodes'))
             return
 
         candidate_name = self._candidate_path.split('/')[-1]
@@ -205,8 +210,8 @@ class ZkAsyncLock(object):
         self._zk.aget(prior_node, self._prior_node_watch,
                       self._prior_node_exists)
 
-    def _prior_node_exists(self, p, rc, value, stat):
-        if rc == zookeeper.NONODE:
+    def _prior_node_exists(self, p, return_code, value, stat):
+        if return_code == zookeeper.NONODE:
             # No node? Check candidates again
             return self._acquire()
         # Node still exists, wait for the watcher and ignore here
