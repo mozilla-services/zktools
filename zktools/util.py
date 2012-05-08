@@ -24,7 +24,9 @@ def safe_call(zk, func, *args, **kwargs):
     while 1:
         try:
             return getattr(zk, func)(*args, **kwargs)
-        except zookeeper.ConnectionLossException:
+        except (zookeeper.ClosingException,
+                zookeeper.ConnectionLossException,
+                zookeeper.OperationTimeoutException):
             zk.connected.wait()
 
 
@@ -61,7 +63,9 @@ def safe_create_ephemeral_sequence(zk, name, data, acl):
         try:
             return zk.create(node_name, data, acl,
                              zookeeper.EPHEMERAL | zookeeper.SEQUENCE)
-        except zookeeper.ConnectionLossException:
+        except (zookeeper.ClosingException,
+                zookeeper.ConnectionLossException,
+                zookeeper.OperationTimeoutException):
             # Check children to see if the node was created
             children = safe_call(zk, 'get_children', path)
             created = [x for x in children if x.startswith(prefix)]

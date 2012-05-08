@@ -44,6 +44,7 @@ ago the lock was created and modified.
 import logging
 import threading
 import time
+import uuid
 from optparse import OptionParser
 
 from clint.textui import colored
@@ -62,10 +63,154 @@ IMMEDIATE = object()
 log = logging.getLogger(__name__)
 
 
+def retryable(d):
+    return d in (zookeeper.CONNECTIONLOSS, zookeeper.CLOSING,
+                 zookeeper.OPERATIONTIMEOUT)
+
+
+class Lock(object):
+    def __init__(self, connection, lock_name, lock_root='/ZktoolsLocks'):
+        self._zk = connection
+        self._lock_root = lock_root
+        self._locknode = '/'.join([lock_root, lock_name])
+        self._lock_acquire_event = threading.Event()
+        self._lock_release_event = threading.Event()
+        self._abort_lock = threading.Lock()
+        self._acquired = False
+        self._aborted = False
+        self._candidate_path = None
+        self.errors = []
+
+    @property
+    def acquired(self):
+        return self._acquired
+
+    @threaded
+    def abort(self):
+        """Aborts a lock acquisition, releases the lock if it was just
+        acquired
+
+        This runs in a separate thread to avoid blocking where it was
+        called.
+
+        """
+        # We use an abort lock here, and inside the notification of lock
+        # acquisition to ensure we aren't in the process of acquiring the
+        # lock while checking to see if it was aborted. This way it was
+        # either aborted before we run here, or we run here to abort it
+        # before the watcher gets to run.
+        self._lock_release_event.clear()
+        self._aborted = True
+
+    def release(self):
+        if not self._acquired:
+            raise Exception("Lock not acquired")
+        self._delete_candidate()
+
+    def _delete_candidate(self):
+        self._zk.adelete(self._candidate_path, -1, self._delete_callback)
+
+    def _reset(self):
+        self._candidate_path = self._node_prefix = None
+        self._aborted = False
+        self._acquired = False
+        self._lock_acquire_event.clear()
+
+    @threaded
+    def _delete_callback(self, p, rc):
+        if rc in (zookeeper.OK, zookeeper.NONODE):
+            self._reset()
+            self._lock_release_event.set()
+        elif retryable(rc):
+            time.sleep(0.2)
+            return self._delete_candidate()
+        else:
+            self.errors.append((rc, 'Delete callback'))
+
+    def acquire(self):
+        if self._lock_acquire_event.is_set():
+            raise Exception("Lock already acquired")
+
+        self._node_prefix = uuid.uuid4().hex + '-'
+        self._create_candidate()
+        return False
+
+    def _create_candidate(self):
+        self._zk.create(self._locknode + "/%s-lock-" % self._node_prefix,
+                        "0", [ZOO_OPEN_ACL_UNSAFE],
+                        zookeeper.EPHEMERAL | zookeeper.SEQUENCE,
+                        self._candidate_creation)
+
+    def _candidate_creation(self, p, rc, value):
+        """Callback for after the node creation runs"""
+        if rc == zookeeper.OK:
+            self._candidate_path = value
+            return self._acquire()
+        elif retryable(rc):
+            self._zk.aget_children(self._locknode, None,
+                                   self._check_children_for_prefix)
+        else:
+            self.errors.append((rc, 'Candidate creation'))
+
+    @threaded
+    def _check_children_for_prefix(self, p, rc, children):
+        """Checks to see during candidate creation errors if the node
+        was actually created"""
+        if rc == zookeeper.OK:
+            for child in children:
+                if child.startswith(self._node_prefix):
+                    # Our child was actually created, set our path
+                    # and proceed with acquisition
+                    self._candidate_path = child
+                    return self._acquire()
+            # No matching child, recreate the candidate
+            self._create_candidate()
+        elif self._aborted:
+            # We were aborted, cease and decist
+            self._reset()
+            self._lock_release_event.set()
+        elif retryable(rc):
+            # We include a small sleep here to avoid wacking the CPU with
+            # constant queries
+            time.sleep(0.2)
+            self._zk.aget_children(self._locknode, None,
+                                   self._check_children_for_prefix)
+
+    def _acquire(self):
+        if self._aborted:
+            return self._delete_candidate()
+        self._zk.aget_children(self._locknode, None,
+                               self._check_candidate_nodes)
+
+    @threaded
+    def _check_candidate_nodes(self, p, rc, children):
+        if retryable(rc):
+            # A small sleep to avoid spinning the CPU
+            time.sleep(0.2)
+            return self._acquire()
+        elif rc != zookeeper.OK:
+            self.errors.append((rc, 'Check candidate nodes'))
+            return
+
+        if self._candidate_path not in children:
+            # Not in the list, reset our candidate path and start over
+            self._candidate_path = None
+            return self._create_candidate()
+
+        # Sort by sequence, ignore proceeding UUID hex
+        children.sort(key=lambda k: k.split('-')[-1])
+
+        index = children.index(self._candidate_path)
+
+        if index == 0:
+            # We're first, if we were asked to abort, delete this
+            if self._aborted:
+                return self._delete_candidate()
+
+
 class _LockBase(object):
     """Base lock implementation for subclasses"""
-    def __init__(self, connection, lock_name, lock_root='/ZktoolsLocks',
-                 logfile=None):
+    def __init__(self, connection, lock_name, lock_root='/ZktoolsLocks'):
         """Create a Zookeeper lock object
 
         :param connection: Zookeeper connection object
@@ -78,17 +223,13 @@ class _LockBase(object):
 
         """
         self._zk = connection
-        self._cv = threading.Condition()
         self._lock_root = lock_root
-        self._locks = threading.local()
-        self._locks.revoked = []
-        self._locks.lock_args = ([], {})
+        self._revoked = []
+        self._lock_args = ([], {})
+        self._has_lock = has_write_lock
         self._log_debug = logging.DEBUG >= log.getEffectiveLevel()
-        if logfile:
-            zookeeper.set_log_stream(open(logfile))
-        else:
-            zookeeper.set_log_stream(open("/dev/null"))
         self._locknode = '%s/%s' % (self._lock_root, lock_name)
+        self._candidate_path = ''
         self._ensure_lock_dir()
 
     def _ensure_lock_dir(self):
@@ -133,11 +274,10 @@ class _LockBase(object):
 
         """
         # First clear out any prior revocation warnings
-        self._locks.revoked = []
-        revoke_lock = self._locks.revoked
+        self._revoked = []
 
         # Create a lock node
-        znode = safe_create_ephemeral_sequence(
+        self._candidate_path = znode = safe_create_ephemeral_sequence(
             self._zk, self._locknode + node_name, "0", [ZOO_OPEN_ACL_UNSAFE])
 
         def revoke_watcher(handle, type, state, path):
@@ -152,16 +292,16 @@ class _LockBase(object):
                 if type == zookeeper.CHANGED_EVENT:
                     data = safe_call(self._zk, 'get', path, revoke_watcher)[0]
                     if data == 'unlock':
-                        revoke_lock.append(True)
+                        self._revoked.append(True)
                 elif type == zookeeper.DELETED_EVENT or \
                      state == zookeeper.EXPIRED_SESSION_STATE:
                     # Trigger if node was deleted
-                    revoke_lock.append(True)
+                    self._revoked.append(True)
             handle_events()
 
         data = safe_call(self._zk, 'get', znode, revoke_watcher)[0]
         if data == 'unlock':
-            revoke_lock.append(True)
+            self._revoked.append(True)
         keyname = znode[znode.rfind('/') + 1:]
 
         acquired = False
@@ -183,6 +323,7 @@ class _LockBase(object):
                     except zookeeper.NoNodeException:
                         pass
                     return False
+            first_run = False
 
             # Get all the children of the node
             children = safe_call(self._zk, 'get_children', self._locknode)
@@ -190,15 +331,16 @@ class _LockBase(object):
 
             if len(children) == 0 or not keyname in children:
                 # Disconnects or other errors can cause this
-                znode = safe_create_ephemeral_sequence(
+                self._candidate_path = znode = safe_create_ephemeral_sequence(
                     self._zk, self._locknode + node_name, "0",
                     [ZOO_OPEN_ACL_UNSAFE])
                 keyname = znode[znode.rfind('/') + 1:]
                 data = safe_call(self._zk, 'get', znode, revoke_watcher)[0]
                 if data == 'unlock':
-                    revoke_lock.append(True)
+                    self._revoked.append(True)
                 continue
-            acquired, blocking_nodes = self._locks.has_lock(keyname, children)
+
+            acquired, blocking_nodes = self._has_lock(keyname, children)
             if acquired:
                 break
 
@@ -219,6 +361,7 @@ class _LockBase(object):
                                   self._locknode + '/' + node, "unlock")
                     except zookeeper.NoNodeException:
                         pass
+
             prior_blocking_node = self._locknode + '/' + blocking_nodes[-1]
             exists = safe_call(self._zk, 'exists', prior_blocking_node,
                                lock_watcher)
@@ -233,20 +376,18 @@ class _LockBase(object):
                 time_spent = time.time() - lock_start
                 wait_for = timeout - time_spent
             cv.wait(wait_for)
-            first_run = False
-        self._locks.lock_node = znode
         return True
 
     def __call__(self, *args, **kwargs):
-        self._locks.lock_args = (args, kwargs)
+        self._lock_args = (args, kwargs)
         return self
 
     def __enter__(self):
-        args, kwargs = getattr(self._locks, 'lock_args', ([], {}))
+        args, kwargs = self._lock_args
         self.acquire(*args, **kwargs)
 
     def __exit__(self, exc_type, exc_value, traceback):
-        self._locks.lock_args = ([], {})
+        self._lock_args = ([], {})
         self.release()
 
     def release(self):
@@ -257,10 +398,9 @@ class _LockBase(object):
         :rtype: bool
 
         """
-        self._locks.revoked = []
+        self._revoked = []
         try:
-            safe_call(self._zk, 'delete', self._locks.lock_node)
-            del self._locks.lock_node
+            safe_call(self._zk, 'delete', self._candidate_path)
             return True
         except (zookeeper.NoNodeException, AttributeError):
             return False
@@ -272,11 +412,11 @@ class _LockBase(object):
         :rtype: bool
 
         """
-        if not hasattr(self._locks, 'lock_node'):
+        if not self._candidate_path:
             # So we can check it even if we released
             return False
 
-        znode = self._locks.lock_node
+        znode = self._candidate_path
         keyname = znode[znode.rfind('/') + 1:]
         # Get all the children of the node
         children = safe_call(self._zk, 'get_children', self._locknode)
@@ -284,7 +424,7 @@ class _LockBase(object):
         if keyname not in children:
             return False
 
-        acquired = self._locks.has_lock(keyname, children)[0]
+        acquired = self._has_lock(keyname, children)[0]
         return bool(acquired)
 
     def clear(self):
@@ -338,7 +478,7 @@ class _LockBase(object):
         :returns: True if the lock has been revoked, False otherwise.
         :rtype: bool
         """
-        return bool(self._locks.revoked)
+        return bool(self._revoked)
 
     @property
     def connected(self):
@@ -388,7 +528,7 @@ class ZkLock(_LockBase):
 
         """
         node_name = '/lock-'
-        self._locks.has_lock = has_write_lock
+        self._has_lock = has_write_lock
         return self._acquire_lock(node_name, timeout, revoke)
 
 
@@ -419,7 +559,7 @@ class ZkReadLock(_LockBase):
 
         """
         node_name = '/read-'
-        self._locks.has_lock = has_read_lock
+        self._has_lock = has_read_lock
         return self._acquire_lock(node_name, timeout, revoke)
 
 
@@ -450,7 +590,6 @@ class ZkWriteLock(_LockBase):
 
         """
         node_name = '/write-'
-        self._locks.has_lock = has_write_lock
         return self._acquire_lock(node_name, timeout, revoke)
 
 
