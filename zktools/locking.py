@@ -107,6 +107,15 @@ class ZkAsyncLock(object):
     def acquired(self):
         return self._acquired
 
+    def acquire(self):
+        if self.acquired:
+            raise Exception("Lock already acquired")
+
+        self._lock_event.clear()
+        self._node_prefix = uuid.uuid4().hex
+        self._create_candidate()
+        return False
+
     def release(self):
         if not self.acquired:
             raise Exception("Lock not acquired")
@@ -127,15 +136,6 @@ class ZkAsyncLock(object):
             return self._delete_candidate()
         else:
             self.errors.append((rc, 'Delete callback'))
-
-    def acquire(self):
-        if self.acquired:
-            raise Exception("Lock already acquired")
-
-        self._node_prefix = uuid.uuid4().hex
-        self._create_candidate()
-        self._lock_event.clear()
-        return False
 
     def _create_candidate(self):
         self._zk.create(self._lock_path + "/%s-lock-" % self._node_prefix,
