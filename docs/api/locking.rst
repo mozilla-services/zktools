@@ -14,8 +14,11 @@ Constants
     Flag used to declare that revocation should occur immediately. Other
     lock-holders will not be given time to release their lock.
 
-Lock Class
-----------
+Lock Classes
+------------
+
+.. autoclass:: ZkAsyncLock
+    :members: __init__, acquire, release, wait_for_acquire, wait_for_release
 
 .. autoclass:: ZkLock
     :members: __init__, acquire, release, revoked, revoke_all, has_lock, clear
