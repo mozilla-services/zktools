@@ -83,7 +83,7 @@ class ZkAsyncLock(object):
             # established yet, then wait for the lock to acquire
             lock.wait_for_acquire()
 
-            # Do stuff with lock
+            # Do stuff with lock, after checking it was acquired
         finally:
             # Release and wait for release
             lock.release()
@@ -93,10 +93,21 @@ class ZkAsyncLock(object):
 
         lock = ZkAsyncLock(zk, '/Mylocks/resourceB')
         with lock:
+            if not lock.acquired:
+                # handle appropriately and return if needed!
             # Won't execute until the lock is acquired
             do_stuff()
         # lock is released
         do_more_stuff()
+
+    .. warning::
+
+        It's possible when waiting for a lock, for it to run into errors
+        during acquisition. This is why you should check to see that the
+        lock was actually acquired before proceeding. If it was not and
+        you'd like to know why, the :attr:`~ZkAsyncLock.errors` attribute
+        on the :class:`ZkAsyncLock` will be an array indicating the errors
+        that were encountered.
 
     """
     def __init__(self, connection, lock_name, lock_root='/ZktoolsLocks'):
