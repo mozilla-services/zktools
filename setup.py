@@ -11,7 +11,6 @@ with open(os.path.join(here, 'CHANGES.rst')) as f:
     CHANGES = f.read()
 
 reqs = [
-    "clint>=0.3.0",
     "zc.zk>=0.7.0"
 ]
 
@@ -41,9 +40,12 @@ setup(
     zip_safe=False,
     tests_require=['pkginfo', 'Mock>=0.7', 'nose'],
     install_requires=reqs,
+    extras_require={
+        "CLI": ["clint>=0.3.0"],
+    },
     entry_points="""
     [console_scripts]
-    zooky = zktools.locking:lock_cli
+    zooky = zktools.locking:lock_cli [CLI]
 
     """
 )

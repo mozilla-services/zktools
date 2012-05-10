@@ -47,9 +47,6 @@ import time
 import uuid
 from optparse import OptionParser
 
-from clint.textui import colored
-from clint.textui import columns
-from clint.textui import puts
 from zc.zk import ZooKeeper
 import zookeeper
 
@@ -697,6 +694,10 @@ def has_write_lock(keyname, children):
 
 def lock_cli():
     """Zktools Lock CLI"""
+    from clint.textui import colored
+    from clint.textui import columns
+    from clint.textui import puts
+
     usage = "usage: %prog COMMAND"
     parser = OptionParser(usage=usage)
     parser.add_option("--host", dest="host", type="str",
