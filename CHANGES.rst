@@ -15,6 +15,8 @@ Changes
   connection loss exception during their call, and have lock code run
   in a separate thread to ensure it doesn't deadlock the ZK event
   thread.
+- Removed zc-zookeeper-static requirement as some OS distributions include
+  the python zookeeper binding as a system package.
 
 Bugfixes
 ********

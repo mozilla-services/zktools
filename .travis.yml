@@ -18,5 +18,6 @@ before_install:
 
 install:
     - make build
+    - ./bin/easy_install -U zc-zookeeper-static
 
 script: make test

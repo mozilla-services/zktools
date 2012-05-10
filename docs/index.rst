@@ -15,6 +15,25 @@ Features:
 * :mod:`Nodes <zktools.node>` - Objects to track values in Zookeeper
   Nodes (zNodes) automatically.
 
+Installing
+==========
+
+zktools can be installed via ``easy_install`` or ``pip``:
+
+.. code-block:: bash
+
+    $ easy_install zktools
+
+You will also need the Python zookeeper C binding installed. There's an
+easy to install staticly compiled version:
+
+.. code-block:: bash
+
+    $ easy_install zc-zookeeper-static
+
+Or if your OS distribution includes a python-zookeeper package, that can
+be installed.
+
 Reference Material
 ==================
 
