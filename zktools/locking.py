@@ -174,10 +174,12 @@ class ZkAsyncLock(object):
 
     @property
     def acquired(self):
+        """Attribute indicating whether the lock has been acquired"""
         return self._acquired
 
     @property
     def candidate_created(self):
+        """Attribute indicating whether a candidate node has been created"""
         return self._candidate_path is not None
 
     def acquire(self, func=None):
