@@ -208,7 +208,7 @@ class ZkAsyncLock(object):
         queue.
 
         The lock candidate node can be checked for by checking the value
-        of :prop:`ZkAsyncLock.candidate_created`.
+        of :attr:`ZkAsyncLock.candidate_created`.
 
         :param func: Function to call when the candidate node has been
                      verifiably confirmed as removed.
