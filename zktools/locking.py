@@ -98,17 +98,19 @@ class ZkAsyncLock(object):
         do_more_stuff()
 
     """
-    def __init__(self, connection, lock_path):
+    def __init__(self, connection, lock_name, lock_root='/ZktoolsLocks'):
         """Create an Asynchronous Zookeeper Lock
 
         :param connection: Zookeeper connection object
         :type connection: zc.zk Zookeeper instance
-        :param lock_path: Path to the lock node that should be used
+        :param lock_name: Path to the lock node that should be used
+        :param lock_root: Path to the root lock node to create the locks
+                          under
         :type lock_root: string
 
         """
         self._zk = connection
-        self._lock_path = lock_path
+        self._lock_path = '/'.join([lock_root, lock_name])
         self._lock_event = threading.Event()
         self._acquired = False
         self._candidate_path = None
@@ -287,8 +289,6 @@ class _LockBase(object):
         :param lock_root: Path to the root lock node to create the locks
                           under
         :type lock_root: string
-        :param logfile: Path to a file to log the Zookeeper stream to
-        :type logfile: string
 
         """
         self._zk = connection

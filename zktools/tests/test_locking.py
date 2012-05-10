@@ -1,8 +1,34 @@
 import threading
 
 from nose.tools import eq_
+import zookeeper
 
 from zktools.tests import TestBase
+
+
+class TestAsyncLocking(TestBase):
+    def makeOne(self, *args, **kwargs):
+        from zktools.locking import ZkAsyncLock
+        return ZkAsyncLock(self.conn, *args, **kwargs)
+
+    def test_retryable(self):
+        from zktools.locking import retryable
+        eq_(True, retryable(zookeeper.CONNECTIONLOSS))
+
+    def testBasicLock(self):
+        lock = self.makeOne('zkALockTest')
+        lock.acquire()
+        lock.wait_for_acquire()
+        eq_(True, lock.acquired)
+        lock.release()
+        lock.wait_for_release()
+        eq_(False, lock.acquired)
+
+    def test_with_blocking(self):
+        lock = self.makeOne('zkALockTest')
+        with lock:
+            eq_(True, lock.acquired)
+        eq_(False, lock.acquired)
 
 
 class TestLocking(TestBase):
