@@ -9,6 +9,23 @@ behavior, revokable shared read/write locks are also supported. All of the
 locks can be revoked as desired. This requires the current lock holder(s) to
 release their lock(s).
 
+This is implemented on the Zookeeper side by creating child lock candidate
+nodes under a parent node and seeing whether the node the lock created is
+first. It also ensures a first-come/first-serve ordering to who gets the lock
+after its released.
+
+**Asynchronous Lock**
+
+The :class:`ZkAsyncLock` uses the Zookeeper async functions to avoid blocking
+while acquiring a lock, and optionally can use a callback style when the lock
+was acquired. It has a great amount of flexibility since it can run in the
+background to establish the lock while the program calling it can decide to
+block later and wait for the lock acquisition as desired.
+
+If the calling program gets tired of waiting, it can delete the lock candidate
+node to avoid blocking any other programs waiting on the lock and handle the
+situation as desired.
+
 **Shared Read/Write Locks**
 
 Also known in the Zookeeper Recipes as ``Revocable Shared Locks with Freaking
