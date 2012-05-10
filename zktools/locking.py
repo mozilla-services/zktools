@@ -60,6 +60,9 @@ IMMEDIATE = object()
 log = logging.getLogger(__name__)
 
 
+__all__ = ['ZkAsyncLock', 'ZkLock', 'ZkReadLock', 'ZkWriteLock']
+
+
 def retryable(d):
     return d in (zookeeper.CONNECTIONLOSS, zookeeper.CLOSING,
                  zookeeper.OPERATIONTIMEOUT)
