@@ -11,6 +11,11 @@ class TestAsyncLocking(TestBase):
         from zktools.locking import ZkAsyncLock
         return ZkAsyncLock(self.conn, *args, **kwargs)
 
+    def setUp(self):
+        if self.conn.exists('/ZktoolsLocks/zkALockTest'):
+            self.conn.delete_recursive(
+                '/ZktoolsLocks/zkALockTest', force=True)
+
     def test_retryable(self):
         from zktools.locking import retryable
         eq_(True, retryable(zookeeper.CONNECTIONLOSS))
@@ -29,6 +34,47 @@ class TestAsyncLocking(TestBase):
         with lock:
             eq_(True, lock.acquired)
         eq_(False, lock.acquired)
+
+    def test_candidate_release(self):
+        lock1 = self.makeOne('zkALockTest')
+        lock2 = self.makeOne('zkALockTest')
+        lock3 = self.makeOne('zkALockTest')
+
+        vals = []
+        pv = threading.Event()
+        release_ev = threading.Event()
+        released = threading.Event()
+
+        def run():
+            lock2.acquire()
+            release_ev.wait()
+            while not lock2.candidate_created:
+                assert vals == []
+            vals.append(lock2.acquired)
+            released.set()
+            lock2.release()
+
+        def waiting():
+            with lock3:
+                vals.append(2)
+                pv.set()
+
+        blocker = threading.Thread(target=run)
+        waiter = threading.Thread(target=waiting)
+        lock1.acquire()
+        lock1.wait_for_acquire()
+        blocker.start()
+        waiter.start()
+        eq_(vals, [])
+        release_ev.set()
+        released.wait()
+        eq_(vals, [False])
+        lock1.release()
+        lock1.wait_for_release()
+        pv.wait()
+        eq_(vals, [False, 2])
+        blocker.join()
+        waiter.join()
 
 
 class TestLocking(TestBase):

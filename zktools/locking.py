@@ -305,6 +305,8 @@ class ZkAsyncLock(object):
         if retryable(return_code):  # Small sleep to avoid CPU hit
             time.sleep(0.1)
             return self._acquire()
+        elif self._candidate_path is None:  # We were released early
+            return
         elif return_code != zookeeper.OK:
             self.errors.append((return_code, 'Check candidate nodes'))
             return
