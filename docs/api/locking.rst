@@ -18,7 +18,7 @@ Lock Classes
 ------------
 
 .. autoclass:: ZkAsyncLock
-    :members: __init__, acquire, release, wait_for_acquire, wait_for_release
+    :members: __init__, acquire, acquired, candidate_created, release, wait_for_acquire, wait_for_release
 
 .. autoclass:: ZkLock
     :members: __init__, acquire, release, revoked, revoke_all, has_lock, clear

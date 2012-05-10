@@ -176,6 +176,10 @@ class ZkAsyncLock(object):
     def acquired(self):
         return self._acquired
 
+    @property
+    def candidate_created(self):
+        return self._candidate_path is not None
+
     def acquire(self, func=None):
         """Acquire a lock
 
@@ -196,8 +200,23 @@ class ZkAsyncLock(object):
         return False
 
     def release(self, func=None):
-        if not self.acquired:
-            raise Exception("Lock not acquired")
+        """Release a lock, or lock candidate node
+
+        This function can be called as long as a lock candidate node has
+        been created. This allows a program to abandon its lock attempt
+        if its been waiting too long, and remove itself from the lock
+        queue.
+
+        The lock candidate node can be checked for by checking the value
+        of :prop:`ZkAsyncLock.candidate_created`.
+
+        :param func: Function to call when the candidate node has been
+                     verifiably confirmed as removed.
+        :returns: False
+
+        """
+        if not self._candidate_path:
+            raise Exception("Lock not acquired, nor was a lock node created")
         self._release_func = func
         self._lock_event.clear()
         self._delete_candidate()
