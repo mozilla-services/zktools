@@ -73,17 +73,18 @@ class ZkAsyncLock(object):
     Example non-blocking use::
 
         lock = ZkAsyncLock(zk, '/Mylocks/resourceB')
-        lock.acquire()
+        try:
+            lock.acquire()
 
-        # Do some stuff that doesn't care if the lock is
-        # established yet, then wait for the lock to acquire
-        lock.wait_for_acquire()
+            # Do some stuff that doesn't care if the lock is
+            # established yet, then wait for the lock to acquire
+            lock.wait_for_acquire()
 
-        # Do stuff with lock
-        lock.release()
-
-        # Wait for the lock to be released (release is also async)
-        lock.wait_for_release()
+            # Do stuff with lock
+        finally:
+            # Release and wait for release
+            lock.release()
+            lock.wait_for_release()
 
     Example blocking use::
 
@@ -136,6 +137,8 @@ class ZkAsyncLock(object):
 
         :param timeout: How long to wait for the lock, defaults to waiting
                         forever
+        :returns: Whether the lock was acquired
+        :rtype: bool
 
         """
         if not self._node_prefix:
@@ -148,6 +151,8 @@ class ZkAsyncLock(object):
 
         :param timeout: How long to wait for the lock to release, defaults to
                         waiting forever
+        :returns: Whether the lock was released
+        :rtype: bool
 
         """
         self._lock_event.wait(timeout)
@@ -158,6 +163,15 @@ class ZkAsyncLock(object):
         return self._acquired
 
     def acquire(self, func=None):
+        """Acquire a lock
+
+        :param func: Function to call when the lock has been acquired. This
+                     function will be called with a single argument, the
+                     lock instance. The lock's :meth:`~ZkAsyncLock.release`
+                     method should be called to release the lock.
+        :returns: False
+
+        """
         if self.acquired:
             raise Exception("Lock already acquired")
 
@@ -185,13 +199,13 @@ class ZkAsyncLock(object):
             self._acquire_func = None
             self._acquired = False
             self._lock_event.set()
-            if self._release_func:
-                self._release_func()
         elif retryable(return_code):
             time.sleep(0.1)
             return self._delete_candidate()
         else:
             self.errors.append((return_code, 'Delete callback'))
+        if self._release_func:
+            self._release_func()
 
     def _create_candidate(self):
         self._zk.create(self._lock_path + "/%s-lock-" % self._node_prefix,
