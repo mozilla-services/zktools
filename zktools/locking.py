@@ -269,6 +269,7 @@ class ZkAsyncLock(object):
         self._zk.aget_children(self._lock_path, None,
                                self._check_candidate_nodes_callback)
 
+    @threaded
     def _candidate_creation_callback(self, p, return_code, value):
         """Callback for after the node creation runs"""
         if return_code == zookeeper.OK:
@@ -332,12 +333,14 @@ class ZkAsyncLock(object):
         self._zk.aget(prior_node, self._prior_node_watcher,
                       self._prior_node_get_callback)
 
+    @threaded
     def _prior_node_get_callback(self, p, return_code, value, stat):
         if return_code == zookeeper.NONODE:
             # No node? Check candidates again
             self._acquire()
         # Node still exists, wait for the watcher and ignore here
 
+    @threaded
     def _prior_node_watcher(self, handle, type, state, path):
         if type != zookeeper.SESSION_EVENT:
             # Retrigger our children check
@@ -414,24 +417,20 @@ class _LockBase(object):
         self._candidate_path = znode = safe_create_ephemeral_sequence(
             self._zk, self._locknode + node_name, "0", [ZOO_OPEN_ACL_UNSAFE])
 
+        @threaded
         def revoke_watcher(handle, type, state, path):
             # This method must be in closure scope to ensure that
             # it can append to the thread it is called from
             # to indicate if this particular thread's lock was
             # revoked or removed
-            @threaded
-            def handle_events():
-                # Run separately in a thread because safe_call can block the
-                # ZK event thread which would be very bad
-                if type == zookeeper.CHANGED_EVENT:
-                    data = safe_call(self._zk, 'get', path, revoke_watcher)[0]
-                    if data == 'unlock':
-                        self._revoked.append(True)
-                elif type == zookeeper.DELETED_EVENT or \
-                     state == zookeeper.EXPIRED_SESSION_STATE:
-                    # Trigger if node was deleted
+            if type == zookeeper.CHANGED_EVENT:
+                data = safe_call(self._zk, 'get', path, revoke_watcher)[0]
+                if data == 'unlock':
                     self._revoked.append(True)
-            handle_events()
+            elif type == zookeeper.DELETED_EVENT or \
+                 state == zookeeper.EXPIRED_SESSION_STATE:
+                # Trigger if node was deleted
+                self._revoked.append(True)
 
         data = safe_call(self._zk, 'get', znode, revoke_watcher)[0]
         if data == 'unlock':
